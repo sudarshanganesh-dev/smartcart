@@ -6,3 +6,57 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+enum ProductStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum ProductSourceType {
+  MANUAL
+  CRAWL
+  FILE_UPLOAD
+}
+
+enum ProductAvailability {
+  IN_STOCK
+  OUT_OF_STOCK
+  UNKNOWN
+}
+
+model Merchant {
+  id        String    @id @default(cuid())
+  name      String
+  slug      String    @unique
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Product {
+  id         String   @id @default(cuid())
+  merchant   Merchant @relation(fields: [merchantId], references: [id])
+  merchantId String
+
+  name        String
+  description String?
+  sku         String?
+  category    String?
+
+  price    Decimal? @db.Decimal(10, 2)
+  currency String?
+
+  availability  ProductAvailability @default(UNKNOWN)
+  stockQuantity Int?
+
+  status     ProductStatus     @default(PENDING_REVIEW)
+  sourceType ProductSourceType
+  sourceUrl  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([merchantId, sku])
+  @@index([merchantId, status])
+}

@@ -1,0 +1,16 @@
+.status-page {
+  max-width: 400px;
+  margin: 80px auto;
+  padding: 24px;
+  text-align: center;
+  font-family: sans-serif;
+}
+
+.status-page ul {
+  list-style: none;
+  padding: 0;
+}
+
+.status-page li {
+  margin: 8px 0;
+}

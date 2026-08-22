@@ -3,8 +3,10 @@ import './App.css'
 import { getMerchants } from './lib/api.js'
 import ConnectionStatus from './components/ConnectionStatus.jsx'
 import AICommerceSection from './components/AICommerceSection.jsx'
+import CustomerChat from './components/CustomerChat.jsx'
 
 function App() {
+  const [view, setView] = useState('merchant') // 'merchant' | 'customer'
   const [merchant, setMerchant] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -35,22 +37,44 @@ function App() {
     <div className="app">
       <header className="app-header">
         <h1>AI Commerce Layer</h1>
+        <nav className="view-toggle">
+          <button
+            type="button"
+            className={`view-toggle__button ${view === 'merchant' ? 'view-toggle__button--active' : ''}`}
+            onClick={() => setView('merchant')}
+          >
+            Merchant
+          </button>
+          <button
+            type="button"
+            className={`view-toggle__button ${view === 'customer' ? 'view-toggle__button--active' : ''}`}
+            onClick={() => setView('customer')}
+          >
+            Customer
+          </button>
+        </nav>
         <ConnectionStatus />
       </header>
 
       <main className="app-main">
-        {loading && <p>Loading merchant…</p>}
+        {view === 'customer' && <CustomerChat />}
 
-        {!loading && error && (
-          <div className="error-banner">
-            <p>{error}</p>
-            <button type="button" onClick={loadMerchant}>
-              Retry
-            </button>
-          </div>
+        {view === 'merchant' && (
+          <>
+            {loading && <p>Loading merchant…</p>}
+
+            {!loading && error && (
+              <div className="error-banner">
+                <p>{error}</p>
+                <button type="button" onClick={loadMerchant}>
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {!loading && !error && merchant && <AICommerceSection merchant={merchant} />}
+          </>
         )}
-
-        {!loading && !error && merchant && <AICommerceSection merchant={merchant} />}
       </main>
     </div>
   )

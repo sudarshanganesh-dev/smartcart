@@ -22,9 +22,198 @@
   color: var(--text);
 }
 
+.view-toggle {
+  display: flex;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px;
+}
+
+.view-toggle__button {
+  border: none;
+  background: none;
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.view-toggle__button--active {
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .app-main {
   flex: 1;
   padding: 24px;
+}
+
+/* Customer chat */
+
+.customer-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 560px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.customer-chat__history {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 240px;
+}
+
+.chat-message {
+  padding: 8px 12px;
+  border-radius: 12px;
+  max-width: 82%;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.chat-message p {
+  margin: 0;
+}
+
+.chat-message p + p {
+  margin-top: 6px;
+}
+
+.chat-message ul,
+.chat-message ol {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+
+.chat-message li + li {
+  margin-top: 2px;
+}
+
+.chat-message--user {
+  align-self: flex-end;
+  background: var(--accent-bg);
+  color: var(--text-h);
+  border-bottom-right-radius: 4px;
+}
+
+.chat-message--assistant {
+  align-self: flex-start;
+  background: var(--code-bg);
+  border-bottom-left-radius: 4px;
+}
+
+.chat-product-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.chat-product-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--bg);
+  text-align: left;
+}
+
+.chat-product-card p {
+  margin: 1px 0;
+}
+
+.chat-product-card__name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-h);
+}
+
+.chat-product-card__price {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.chat-product-card__availability {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.chat-product-card__merchant {
+  font-size: 12px;
+  color: var(--text);
+}
+
+/* Cart summary — read-only for Phase 3C; no quantity/remove controls */
+
+.cart-summary {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: var(--code-bg);
+}
+
+.cart-summary__header {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.cart-summary__items {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cart-summary__item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.cart-summary__item-name {
+  color: var(--text-h);
+}
+
+.cart-summary__item-blocked {
+  color: #c0392b;
+  font-weight: 600;
+}
+
+.customer-chat__input {
+  display: flex;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.customer-chat__input input {
+  flex: 1;
+  font: inherit;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+@media (max-width: 600px) {
+  .customer-chat {
+    max-width: 100%;
+  }
+
+  .chat-message {
+    max-width: 92%;
+  }
 }
 
 /* Ingestion choices */

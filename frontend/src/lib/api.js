@@ -92,6 +92,17 @@ export async function crawlWebsite(merchantId, url) {
   })
 }
 
+// Deliberately does NOT run products through normalizeProduct(): the
+// commerce/customer API's price is a canonical decimal STRING end to end
+// (Phase 3A Decision 3) and must never be coerced into a JS float on the way
+// to display, unlike the merchant-management API's product shape.
+export async function sendChatMessage(conversationId, message) {
+  return request('/api/customer/chat', {
+    method: 'POST',
+    body: JSON.stringify({ conversationId, message }),
+  })
+}
+
 export async function importCatalog(merchantId, format, file) {
   const formData = new FormData()
   formData.append('format', format)

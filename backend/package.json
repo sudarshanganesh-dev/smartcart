@@ -11,6 +11,7 @@
     "seed": "node prisma/seed.js"
   },
   "dependencies": {
+    "@google/genai": "^2.18.0",
     "@prisma/client": "^6.2.1",
     "cheerio": "^1.2.0",
     "cors": "^2.8.5",

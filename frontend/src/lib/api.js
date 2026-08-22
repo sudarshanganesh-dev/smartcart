@@ -85,6 +85,13 @@ export async function deleteProduct(merchantId, productId) {
   })
 }
 
+export async function crawlWebsite(merchantId, url) {
+  return request(`/api/merchants/${merchantId}/products/crawl`, {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  })
+}
+
 export async function importCatalog(merchantId, format, file) {
   const formData = new FormData()
   formData.append('format', format)

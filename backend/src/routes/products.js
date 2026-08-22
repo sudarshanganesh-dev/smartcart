@@ -9,6 +9,7 @@ import {
 } from "../lib/productValidation.js";
 import { isSkuConflictError, sendSkuConflict } from "../lib/prismaErrors.js";
 import { MAX_IMPORT_FILE_SIZE_BYTES, importCatalogFile } from "../lib/catalogImport.js";
+import { crawlSite } from "../lib/crawler/crawlSite.js";
 
 export const productsRouter = Router({ mergeParams: true });
 
@@ -117,6 +118,27 @@ productsRouter.post("/import", handleFileUpload, async (req, res) => {
     res.status(200).json(result.summary);
   } catch (error) {
     console.error("Catalog import failed:", error);
+    res.status(500).json({ error: "INTERNAL_ERROR" });
+  }
+});
+
+productsRouter.post("/crawl", async (req, res) => {
+  const url = req.body?.url;
+  if (typeof url !== "string" || url.trim() === "") {
+    return res.status(400).json({ error: "INVALID_URL" });
+  }
+
+  try {
+    const result = await crawlSite({ url: url.trim(), merchantId: req.merchant.id });
+
+    if (result.batchError) {
+      const status = result.batchError.error === "CRAWL_IN_PROGRESS" ? 409 : 400;
+      return res.status(status).json(result.batchError);
+    }
+
+    res.status(200).json(result.summary);
+  } catch (error) {
+    console.error("Website crawl failed:", error);
     res.status(500).json({ error: "INTERNAL_ERROR" });
   }
 });

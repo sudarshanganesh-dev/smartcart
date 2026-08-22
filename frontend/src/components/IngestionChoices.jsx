@@ -1,10 +1,12 @@
-function IngestionChoices({ onSelectManual, onSelectUpload }) {
+function IngestionChoices({ onSelectManual, onSelectUpload, onSelectCrawl }) {
   return (
     <div className="ingestion-choices">
-      <div className="ingestion-card ingestion-card--disabled">
+      <div className="ingestion-card">
         <h3>Crawl Website</h3>
         <p>Import products by crawling your existing website.</p>
-        <span className="ingestion-card__tag">Coming next</span>
+        <button type="button" onClick={onSelectCrawl}>
+          Start
+        </button>
       </div>
 
       <div className="ingestion-card">

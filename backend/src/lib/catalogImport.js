@@ -150,6 +150,90 @@ function describeWarnings(data) {
   return warnings;
 }
 
+// Shared per-item pipeline used by EVERY ingestion method (file upload, crawl, and
+// any future method): normalize -> validate (lenient — commerce fields optional) ->
+// in-batch SKU dedupe -> create -> DB-level SKU-conflict catch -> warning
+// classification. Callers never fork this logic; they only supply `items` and a
+// `sourceType`.
+//
+// `items`: Array<{ raw: object, meta?: object, extraWarnings?: string[] }>
+//   - `raw` is fed through normalizeRow()/validateProductInput() as-is.
+//   - `meta` is caller-supplied identifying/provenance data (e.g. `{ row: 1 }` or
+//     `{ url, sourceUrl }`) spread into the corresponding result entry; a
+//     `sourceUrl` key in `meta` is also applied to the created Product row.
+//   - `extraWarnings` lets a caller layer additional warnings (e.g. an AI-assisted
+//     or low-confidence-extraction note) onto the same shared warning output
+//     without forking describeWarnings().
+export async function importNormalizedRows(items, { merchantId, sourceType }) {
+  const seenSkus = new Map(); // sku -> identifying label of the row that first used it
+  const results = [];
+  let imported = 0;
+  let withWarnings = 0;
+  let failed = 0;
+
+  for (const item of items) {
+    const { raw, meta = {}, extraWarnings = [] } = item;
+    const skuLabel = meta.row !== undefined ? `row ${meta.row}` : meta.url || "an earlier item";
+
+    const normalized = normalizeRow(raw);
+    const { errors, data } = validateProductInput(normalized, { partial: false, requireCommerceFields: false });
+
+    if (errors.length > 0) {
+      failed += 1;
+      results.push({ ...meta, outcome: "FAILED", name: normalized.name, errors });
+      continue;
+    }
+
+    if (data.sku && seenSkus.has(data.sku)) {
+      failed += 1;
+      results.push({
+        ...meta,
+        outcome: "FAILED",
+        name: data.name,
+        errors: [`duplicate SKU "${data.sku}" — already used by ${seenSkus.get(data.sku)}`],
+      });
+      continue;
+    }
+
+    try {
+      const product = await prisma.product.create({
+        data: {
+          ...data,
+          merchantId,
+          sourceType,
+          status: "PENDING_REVIEW",
+          ...(meta.sourceUrl ? { sourceUrl: meta.sourceUrl } : {}),
+        },
+      });
+
+      if (data.sku) seenSkus.set(data.sku, skuLabel);
+
+      const warnings = [...describeWarnings(data), ...extraWarnings];
+      imported += 1;
+      if (warnings.length > 0) {
+        withWarnings += 1;
+        results.push({ ...meta, outcome: "IMPORTED_WITH_WARNINGS", productId: product.id, name: product.name, warnings });
+      } else {
+        results.push({ ...meta, outcome: "IMPORTED", productId: product.id, name: product.name });
+      }
+    } catch (error) {
+      if (isSkuConflictError(error)) {
+        failed += 1;
+        results.push({
+          ...meta,
+          outcome: "FAILED",
+          name: data.name,
+          errors: ["A product with this SKU already exists for this merchant."],
+        });
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  return { imported, withWarnings, failed, results };
+}
+
 export async function importCatalogFile({ buffer, format, merchantId }) {
   let parsed;
   try {
@@ -174,69 +258,11 @@ export async function importCatalogFile({ buffer, format, merchantId }) {
     return { batchError: { error: "TOO_MANY_ROWS", max: MAX_IMPORT_ROWS } };
   }
 
-  const seenSkus = new Map(); // sku -> row number that first used it
-  const results = [];
-  let imported = 0;
-  let withWarnings = 0;
-  let failed = 0;
-
-  for (let i = 0; i < rawRows.length; i++) {
-    const rowNumber = i + 1;
-    const normalized = normalizeRow(rawRows[i]);
-
-    const { errors, data } = validateProductInput(normalized, { partial: false, requireCommerceFields: false });
-
-    if (errors.length > 0) {
-      failed += 1;
-      results.push({ row: rowNumber, outcome: "FAILED", name: normalized.name, errors });
-      continue;
-    }
-
-    if (data.sku && seenSkus.has(data.sku)) {
-      failed += 1;
-      results.push({
-        row: rowNumber,
-        outcome: "FAILED",
-        name: data.name,
-        errors: [`duplicate SKU "${data.sku}" — already used by row ${seenSkus.get(data.sku)}`],
-      });
-      continue;
-    }
-
-    try {
-      const product = await prisma.product.create({
-        data: {
-          ...data,
-          merchantId,
-          sourceType: "FILE_UPLOAD",
-          status: "PENDING_REVIEW",
-        },
-      });
-
-      if (data.sku) seenSkus.set(data.sku, rowNumber);
-
-      const warnings = describeWarnings(data);
-      imported += 1;
-      if (warnings.length > 0) {
-        withWarnings += 1;
-        results.push({ row: rowNumber, outcome: "IMPORTED_WITH_WARNINGS", productId: product.id, name: product.name, warnings });
-      } else {
-        results.push({ row: rowNumber, outcome: "IMPORTED", productId: product.id, name: product.name });
-      }
-    } catch (error) {
-      if (isSkuConflictError(error)) {
-        failed += 1;
-        results.push({
-          row: rowNumber,
-          outcome: "FAILED",
-          name: data.name,
-          errors: ["A product with this SKU already exists for this merchant."],
-        });
-        continue;
-      }
-      throw error;
-    }
-  }
+  const items = rawRows.map((raw, index) => ({ raw, meta: { row: index + 1 } }));
+  const { imported, withWarnings, failed, results } = await importNormalizedRows(items, {
+    merchantId,
+    sourceType: "FILE_UPLOAD",
+  });
 
   return {
     summary: {

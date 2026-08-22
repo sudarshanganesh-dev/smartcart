@@ -12,10 +12,12 @@
   },
   "dependencies": {
     "@prisma/client": "^6.2.1",
+    "cheerio": "^1.2.0",
     "cors": "^2.8.5",
     "csv-parse": "^7.0.2",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "fast-xml-parser": "^5.11.0",
     "multer": "^2.2.0"
   },
   "devDependencies": {

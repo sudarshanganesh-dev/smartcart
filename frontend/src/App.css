@@ -440,3 +440,36 @@
   background: rgba(192, 57, 43, 0.15);
   color: #c0392b;
 }
+
+.compatibility-banner {
+  padding: 14px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.compatibility-banner p {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+
+.compatibility-banner__heading {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.compatibility-banner--compatible {
+  background: rgba(39, 174, 96, 0.1);
+  border-color: rgba(39, 174, 96, 0.3);
+}
+
+.compatibility-banner--partial {
+  background: rgba(230, 168, 23, 0.1);
+  border-color: rgba(230, 168, 23, 0.3);
+}
+
+.compatibility-banner--unavailable {
+  background: rgba(192, 57, 43, 0.08);
+  border-color: rgba(192, 57, 43, 0.25);
+}

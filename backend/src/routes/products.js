@@ -11,6 +11,20 @@ export const productsRouter = Router({ mergeParams: true });
 
 const STATUS_VALUES = ["PENDING_REVIEW", "APPROVED", "REJECTED"];
 
+function isSkuConflictError(error) {
+  if (error?.code !== "P2002") return false;
+  const target = error.meta?.target;
+  return Array.isArray(target) ? target.includes("sku") : String(target || "").includes("sku");
+}
+
+function sendSkuConflict(res) {
+  return res.status(409).json({
+    error: "SKU_ALREADY_EXISTS",
+    field: "sku",
+    message: "A product with this SKU already exists for this merchant.",
+  });
+}
+
 async function loadProduct(req, res, next) {
   const product = await prisma.product.findFirst({
     where: { id: req.params.productId, merchantId: req.merchant.id },
@@ -43,22 +57,33 @@ productsRouter.get("/", async (req, res) => {
 });
 
 productsRouter.post("/", async (req, res) => {
-  const { errors, data } = validateProductInput(req.body, { partial: false });
+  // Manual creation requires complete commerce fields up front, since the merchant is
+  // entering the data directly. Future CRAWL/FILE_UPLOAD ingestion will intentionally
+  // allow incomplete records and must not pass requireCommerceFields here.
+  const { errors, data } = validateProductInput(req.body, { partial: false, requireCommerceFields: true });
 
   if (errors.length > 0) {
     return res.status(422).json({ error: "VALIDATION_FAILED", details: errors });
   }
 
-  const product = await prisma.product.create({
-    data: {
-      ...data,
-      merchantId: req.merchant.id,
-      sourceType: "MANUAL",
-      status: "PENDING_REVIEW",
-    },
-  });
+  try {
+    const product = await prisma.product.create({
+      data: {
+        ...data,
+        merchantId: req.merchant.id,
+        sourceType: "MANUAL",
+        status: "PENDING_REVIEW",
+      },
+    });
 
-  res.status(201).json(product);
+    res.status(201).json(product);
+  } catch (error) {
+    if (isSkuConflictError(error)) {
+      return sendSkuConflict(res);
+    }
+    console.error("Failed to create product:", error);
+    res.status(500).json({ error: "INTERNAL_ERROR" });
+  }
 });
 
 productsRouter.get("/:productId", loadProduct, (req, res) => {
@@ -102,15 +127,23 @@ productsRouter.patch("/:productId", loadProduct, async (req, res) => {
     }
   }
 
-  const updated = await prisma.product.update({
-    where: { id: product.id },
-    data: {
-      ...data,
-      status: nextStatus,
-    },
-  });
+  try {
+    const updated = await prisma.product.update({
+      where: { id: product.id },
+      data: {
+        ...data,
+        status: nextStatus,
+      },
+    });
 
-  res.json(updated);
+    res.json(updated);
+  } catch (error) {
+    if (isSkuConflictError(error)) {
+      return sendSkuConflict(res);
+    }
+    console.error("Failed to update product:", error);
+    res.status(500).json({ error: "INTERNAL_ERROR" });
+  }
 });
 
 productsRouter.post("/:productId/approve", loadProduct, async (req, res) => {

@@ -21,7 +21,7 @@ export const COMMERCE_CRITICAL_FIELDS = [
   "sku",
 ];
 
-export function validateProductInput(body, { partial = false } = {}) {
+export function validateProductInput(body, { partial = false, requireCommerceFields = false } = {}) {
   const errors = [];
   const data = {};
 
@@ -54,25 +54,37 @@ export function validateProductInput(body, { partial = false } = {}) {
   if (has("category")) {
     if (body.category !== null && typeof body.category !== "string") {
       errors.push("category must be a string or null");
+    } else if (requireCommerceFields && (body.category === null || body.category.trim().length === 0)) {
+      errors.push("category is required");
     } else {
       data.category = body.category;
     }
+  } else if (requireCommerceFields) {
+    errors.push("category is required");
   }
 
   if (has("price")) {
     if (body.price !== null && (typeof body.price !== "number" || Number.isNaN(body.price) || body.price < 0)) {
       errors.push("price must be a non-negative number or null");
+    } else if (requireCommerceFields && body.price === null) {
+      errors.push("price is required");
     } else {
       data.price = body.price;
     }
+  } else if (requireCommerceFields) {
+    errors.push("price is required");
   }
 
   if (has("currency")) {
     if (body.currency !== null && !CURRENCY_PATTERN.test(body.currency)) {
       errors.push("currency must be a 3-letter uppercase ISO 4217 code or null");
+    } else if (requireCommerceFields && body.currency === null) {
+      errors.push("currency is required");
     } else {
       data.currency = body.currency;
     }
+  } else if (requireCommerceFields) {
+    errors.push("currency is required");
   }
 
   if (has("availability")) {
@@ -81,6 +93,8 @@ export function validateProductInput(body, { partial = false } = {}) {
     } else {
       data.availability = body.availability;
     }
+  } else if (requireCommerceFields) {
+    errors.push("availability is required");
   }
 
   if (has("stockQuantity")) {

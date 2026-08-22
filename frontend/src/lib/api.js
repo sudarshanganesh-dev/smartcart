@@ -78,3 +78,34 @@ export async function rejectProduct(merchantId, productId) {
   })
   return normalizeProduct(product)
 }
+
+export async function deleteProduct(merchantId, productId) {
+  return request(`/api/merchants/${merchantId}/products/${productId}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function importCatalog(merchantId, format, file) {
+  const formData = new FormData()
+  formData.append('format', format)
+  formData.append('file', file)
+
+  let response
+  try {
+    response = await fetch(`${API_BASE_URL}/api/merchants/${merchantId}/products/import`, {
+      method: 'POST',
+      body: formData,
+    })
+  } catch {
+    throw new ApiError('Could not reach the backend', { status: null, body: null })
+  }
+
+  const text = await response.text()
+  const body = text ? JSON.parse(text) : null
+
+  if (!response.ok) {
+    throw new ApiError(body?.error || 'Request failed', { status: response.status, body })
+  }
+
+  return body
+}

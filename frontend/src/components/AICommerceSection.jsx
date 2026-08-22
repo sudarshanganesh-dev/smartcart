@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import IngestionChoices from './IngestionChoices.jsx'
 import ProductWorkspace from './ProductWorkspace.jsx'
+import UploadCatalog from './UploadCatalog.jsx'
 
 function AICommerceSection({ merchant }) {
   const [view, setView] = useState('choices')
@@ -9,7 +10,22 @@ function AICommerceSection({ merchant }) {
     return <ProductWorkspace merchant={merchant} onBack={() => setView('choices')} />
   }
 
-  return <IngestionChoices onSelectManual={() => setView('manual')} />
+  if (view === 'upload') {
+    return (
+      <UploadCatalog
+        merchant={merchant}
+        onBack={() => setView('choices')}
+        onDone={() => setView('manual')}
+      />
+    )
+  }
+
+  return (
+    <IngestionChoices
+      onSelectManual={() => setView('manual')}
+      onSelectUpload={() => setView('upload')}
+    />
+  )
 }
 
 export default AICommerceSection

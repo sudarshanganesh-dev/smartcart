@@ -1,4 +1,5 @@
 import { Router } from "express";
+import multer from "multer";
 import { prisma } from "../lib/prisma.js";
 import {
   validateProductInput,
@@ -6,22 +7,28 @@ import {
   EDITABLE_FIELDS,
   COMMERCE_CRITICAL_FIELDS,
 } from "../lib/productValidation.js";
+import { isSkuConflictError, sendSkuConflict } from "../lib/prismaErrors.js";
+import { MAX_IMPORT_FILE_SIZE_BYTES, importCatalogFile } from "../lib/catalogImport.js";
 
 export const productsRouter = Router({ mergeParams: true });
 
 const STATUS_VALUES = ["PENDING_REVIEW", "APPROVED", "REJECTED"];
 
-function isSkuConflictError(error) {
-  if (error?.code !== "P2002") return false;
-  const target = error.meta?.target;
-  return Array.isArray(target) ? target.includes("sku") : String(target || "").includes("sku");
-}
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_IMPORT_FILE_SIZE_BYTES },
+});
 
-function sendSkuConflict(res) {
-  return res.status(409).json({
-    error: "SKU_ALREADY_EXISTS",
-    field: "sku",
-    message: "A product with this SKU already exists for this merchant.",
+function handleFileUpload(req, res, next) {
+  upload.single("file")(req, res, (err) => {
+    if (err) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return res.status(413).json({ error: "FILE_TOO_LARGE", maxBytes: MAX_IMPORT_FILE_SIZE_BYTES });
+      }
+      console.error("File upload error:", err);
+      return res.status(400).json({ error: "UPLOAD_FAILED" });
+    }
+    next();
   });
 }
 
@@ -86,6 +93,34 @@ productsRouter.post("/", async (req, res) => {
   }
 });
 
+productsRouter.post("/import", handleFileUpload, async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: "FILE_REQUIRED" });
+  }
+
+  const format = req.body.format;
+  if (format !== "csv" && format !== "json") {
+    return res.status(400).json({ error: "INVALID_FORMAT" });
+  }
+
+  try {
+    const result = await importCatalogFile({
+      buffer: req.file.buffer,
+      format,
+      merchantId: req.merchant.id,
+    });
+
+    if (result.batchError) {
+      return res.status(400).json(result.batchError);
+    }
+
+    res.status(200).json(result.summary);
+  } catch (error) {
+    console.error("Catalog import failed:", error);
+    res.status(500).json({ error: "INTERNAL_ERROR" });
+  }
+});
+
 productsRouter.get("/:productId", loadProduct, (req, res) => {
   res.json(req.product);
 });
@@ -144,6 +179,11 @@ productsRouter.patch("/:productId", loadProduct, async (req, res) => {
     console.error("Failed to update product:", error);
     res.status(500).json({ error: "INTERNAL_ERROR" });
   }
+});
+
+productsRouter.delete("/:productId", loadProduct, async (req, res) => {
+  await prisma.product.delete({ where: { id: req.product.id } });
+  res.status(200).json({ deleted: true, id: req.product.id });
 });
 
 productsRouter.post("/:productId/approve", loadProduct, async (req, res) => {

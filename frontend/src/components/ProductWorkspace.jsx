@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getProducts, createProduct, updateProduct, approveProduct, rejectProduct } from '../lib/api.js'
+import { getProducts, createProduct, updateProduct, approveProduct, rejectProduct, deleteProduct } from '../lib/api.js'
 import ProductForm from './ProductForm.jsx'
 import ProductList from './ProductList.jsx'
 
@@ -17,8 +17,11 @@ function ProductWorkspace({ merchant, onBack }) {
   const [formMode, setFormMode] = useState(null) // null | 'create' | product object
   const [successMessage, setSuccessMessage] = useState(null)
 
-  const fetchProducts = useCallback(async (status) => {
-    setLoading(true)
+  // `silent` skips the loading-state swap so <ProductList> stays mounted through the
+  // refetch — approve/reject/delete rely on this to keep their per-row error visible
+  // instead of it being wiped by an unmount/remount when the list briefly disappears.
+  const fetchProducts = useCallback(async (status, { silent = false } = {}) => {
+    if (!silent) setLoading(true)
     setListError(null)
     try {
       const data = await getProducts(merchant.id, status)
@@ -26,7 +29,7 @@ function ProductWorkspace({ merchant, onBack }) {
     } catch (error) {
       setListError(error.message || 'Failed to load products')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [merchant.id])
 
@@ -63,7 +66,7 @@ function ProductWorkspace({ merchant, onBack }) {
     try {
       await approveProduct(merchant.id, product.id)
     } finally {
-      await fetchProducts(activeTab)
+      await fetchProducts(activeTab, { silent: true })
     }
   }
 
@@ -71,7 +74,16 @@ function ProductWorkspace({ merchant, onBack }) {
     try {
       await rejectProduct(merchant.id, product.id)
     } finally {
-      await fetchProducts(activeTab)
+      await fetchProducts(activeTab, { silent: true })
+    }
+  }
+
+  async function handleDelete(product) {
+    try {
+      await deleteProduct(merchant.id, product.id)
+      setSuccessMessage('Product deleted.')
+    } finally {
+      await fetchProducts(activeTab, { silent: true })
     }
   }
 
@@ -136,6 +148,7 @@ function ProductWorkspace({ merchant, onBack }) {
           }}
           onApprove={handleApprove}
           onReject={handleReject}
+          onDelete={handleDelete}
         />
       )}
     </div>

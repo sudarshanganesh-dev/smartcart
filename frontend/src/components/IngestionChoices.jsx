@@ -1,4 +1,4 @@
-function IngestionChoices({ onSelectManual }) {
+function IngestionChoices({ onSelectManual, onSelectUpload }) {
   return (
     <div className="ingestion-choices">
       <div className="ingestion-card ingestion-card--disabled">
@@ -7,10 +7,12 @@ function IngestionChoices({ onSelectManual }) {
         <span className="ingestion-card__tag">Coming next</span>
       </div>
 
-      <div className="ingestion-card ingestion-card--disabled">
+      <div className="ingestion-card">
         <h3>Upload Catalog</h3>
         <p>Import products from a structured CSV or JSON file.</p>
-        <span className="ingestion-card__tag">Coming next</span>
+        <button type="button" onClick={onSelectUpload}>
+          Start
+        </button>
       </div>
 
       <div className="ingestion-card">

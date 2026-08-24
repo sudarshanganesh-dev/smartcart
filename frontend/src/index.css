@@ -1,22 +1,50 @@
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  /* Premium fintech/AI SaaS palette — deep ink text, cool neutral page
+     background so white/near-white surfaces read as genuinely elevated,
+     one controlled accent gradient reserved for hero/signature moments
+     only (role selector, AI Growth card, hero money figures). */
+  --text: #5b6472;
+  --text-h: #0b1220;
+  --bg: #f2f4f8;
+  --surface: #ffffff;
+  --surface-sunken: #f7f8fb;
+  --border: #e2e6ee;
+  --border-strong: #cbd2e0;
+  --code-bg: #eef1f6;
+  --accent: #2f5fed;
+  --accent-hover: #2549c4;
+  --accent-bg: rgba(47, 95, 237, 0.08);
+  --accent-border: rgba(47, 95, 237, 0.35);
+  --accent-ink: #1a3aa8;
+  /* Reserved for hero surfaces only — never a global background. */
+  --hero-gradient: linear-gradient(135deg, #2f5fed 0%, #6b3ff0 100%);
+  --hero-gradient-soft: linear-gradient(135deg, rgba(47, 95, 237, 0.1) 0%, rgba(107, 63, 240, 0.08) 100%);
+  --success: #0f8a52;
+  --success-bg: rgba(15, 138, 82, 0.1);
+  --success-ink: #0a6e40;
+  --warning: #a3660a;
+  --warning-bg: rgba(163, 102, 10, 0.12);
+  --danger: #c0392b;
+  --danger-bg: rgba(192, 57, 43, 0.1);
+  --neutral: #616a7a;
+  --neutral-bg: rgba(97, 106, 122, 0.12);
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+
+  /* Three-tier elevation — normal content, important stat/summary cards,
+     and the AI Growth hero surface. */
+  --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-2: 0 2px 8px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-3: 0 12px 32px rgba(31, 55, 148, 0.14), 0 2px 8px rgba(15, 23, 42, 0.08);
+
+  --sans: 'Segoe UI', system-ui, Roboto, sans-serif;
+  --heading: 'Segoe UI', system-ui, Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
+  font: 15px/150% var(--sans);
+  letter-spacing: 0;
   color-scheme: light dark;
   color: var(--text);
   background: var(--bg);
@@ -24,30 +52,42 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+    --text: #9aa4b8;
+    --text-h: #f4f6fb;
+    --bg: #0b0e16;
+    --surface: #12161f;
+    --surface-sunken: #0e1119;
+    --border: #232937;
+    --border-strong: #313a4d;
+    --code-bg: #171b26;
+    --accent: #6f93ff;
+    --accent-hover: #8babff;
+    --accent-bg: rgba(111, 147, 255, 0.14);
+    --accent-border: rgba(111, 147, 255, 0.4);
+    --accent-ink: #b7c6ff;
+    --hero-gradient: linear-gradient(135deg, #3a5fe0 0%, #7c4bf0 100%);
+    --hero-gradient-soft: linear-gradient(135deg, rgba(58, 95, 224, 0.2) 0%, rgba(124, 75, 240, 0.16) 100%);
+    --success: #38c982;
+    --success-bg: rgba(56, 201, 130, 0.14);
+    --success-ink: #6fe3a8;
+    --warning: #e2a63d;
+    --warning-bg: rgba(226, 166, 61, 0.14);
+    --danger: #e2695d;
+    --danger-bg: rgba(226, 105, 93, 0.14);
+    --neutral: #9aa4b8;
+    --neutral-bg: rgba(154, 164, 184, 0.14);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-2: 0 2px 8px rgba(0, 0, 0, 0.35);
+    --shadow-3: 0 16px 40px rgba(0, 0, 0, 0.5);
   }
+}
 
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
@@ -55,55 +95,62 @@ body {
 }
 
 #root {
-  max-width: 1126px;
-  margin: 0 auto;
-  text-align: left;
   min-height: 100svh;
   display: flex;
   flex-direction: column;
-  box-sizing: border-box;
 }
 
 h1,
-h2 {
+h2,
+h3,
+h4 {
   font-family: var(--heading);
-  font-weight: 500;
+  font-weight: 650;
   color: var(--text-h);
+  margin: 0 0 4px;
+  letter-spacing: -0.01em;
 }
 
+/* Clear scale: page title / section title / card title / metadata. */
 h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
+  font-size: 26px;
+  letter-spacing: -0.02em;
 }
+
 h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
+  font-size: 19px;
 }
+
+h3 {
+  font-size: 16px;
+}
+
+h4 {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text);
+}
+
 p {
   margin: 0;
 }
 
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
+button {
+  font-family: inherit;
 }
 
 code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 2px 6px;
+  border-radius: 4px;
   background: var(--code-bg);
+  color: var(--text-h);
+}
+
+/* Money/score figures — tabular numerals so digits align in a column. */
+.num-tabular {
+  font-variant-numeric: tabular-nums;
 }

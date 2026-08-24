@@ -96,6 +96,7 @@ function ProductWorkspace({ merchant, onBack }) {
         <h2>{merchant.name} — Products</h2>
         <button
           type="button"
+          className="btn-primary"
           onClick={() => {
             setSuccessMessage(null)
             setFormMode('create')

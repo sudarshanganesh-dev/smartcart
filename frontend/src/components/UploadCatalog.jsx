@@ -114,6 +114,7 @@ function UploadCatalog({ merchant, onBack, onDone }) {
 
           <input
             type="file"
+            aria-label="Catalog file"
             accept={activeFormat.accept}
             disabled={stage === 'processing'}
             onChange={(e) => setFile(e.target.files?.[0] || null)}

@@ -2,6 +2,7 @@
 // (price/currency/availability/stock) always comes from commerceService via
 // cartTools.js; this file only knows how to represent and total up whatever
 // it's given. Kept dependency-free so it's trivially unit-testable.
+import { createHash } from "node:crypto";
 
 // Pure technical/resource-protection ceilings for this in-memory MVP — NOT
 // business or inventory rules. The real purchasable-quantity limit is always
@@ -14,7 +15,7 @@ export const TECHNICAL_MAX_QUANTITY_PER_LINE = 1000;
 export const TECHNICAL_MAX_CART_ITEMS = 50;
 
 export function createEmptyCart() {
-  return { currency: null, items: [] };
+  return { currency: null, merchantId: null, items: [] };
 }
 
 // Money is never handled as a JS float. A validated "123.45"-style decimal
@@ -49,12 +50,26 @@ export function totalUnitCount(cart) {
   return cart.items.reduce((sum, item) => sum + item.quantity, 0);
 }
 
-// If removing an item empties the cart, the currency lock is released so a
-// different currency can be started fresh next time.
-export function releaseCurrencyLockIfEmpty(cart) {
+// If removing an item empties the cart, the currency AND merchant locks are
+// released so a different currency/merchant can be started fresh next time.
+export function releaseLocksIfEmpty(cart) {
   if (cart.items.length === 0) {
     cart.currency = null;
+    cart.merchantId = null;
   }
+}
+
+// A deterministic fingerprint of exactly what would be charged: which
+// products, at what quantity, at what trusted price, in what currency.
+// Used only for server-side create-order idempotency (Phase 4A Addition 1)
+// — never accepted from the frontend, always recomputed here from trusted
+// in-memory cart state, and never exposed in any API response.
+export function computeCartFingerprint(cart) {
+  const normalizedItems = cart.items
+    .map((item) => ({ productId: item.productId, quantity: item.quantity, priceSnapshot: item.priceSnapshot }))
+    .sort((a, b) => (a.productId < b.productId ? -1 : a.productId > b.productId ? 1 : 0));
+  const payload = JSON.stringify({ currency: cart.currency, merchantId: cart.merchantId, items: normalizedItems });
+  return createHash("sha256").update(payload).digest("hex");
 }
 
 // The exact customer-facing shape from the approved Phase 3C spec, plus one

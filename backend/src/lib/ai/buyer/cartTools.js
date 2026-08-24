@@ -3,7 +3,7 @@ import {
   TECHNICAL_MAX_QUANTITY_PER_LINE,
   TECHNICAL_MAX_CART_ITEMS,
   findCartItem,
-  releaseCurrencyLockIfEmpty,
+  releaseLocksIfEmpty,
   toCartDTO,
 } from "./cart.js";
 
@@ -169,17 +169,31 @@ export const CART_TOOL_EXECUTORS = {
           message: "This cart already contains items priced in a different currency.",
         };
       }
+      // Phase 4B: one merchant per cart/order (enforced here, at add-time,
+      // so a cross-merchant cart fails fast rather than only at payment) —
+      // mirrors the currency lock immediately above.
+      if (context.cart.merchantId !== null && context.cart.merchantId !== product.merchant.id) {
+        return {
+          error: "MERCHANT_CONFLICT",
+          message: "This cart already contains items from a different merchant.",
+        };
+      }
       context.cart.items.push({
         productId: product.id,
         quantity,
         priceSnapshot: product.price,
         name: product.name,
+        merchantId: product.merchant.id,
+        sku: product.sku,
       });
       context.cart.currency = product.currency;
+      context.cart.merchantId = product.merchant.id;
     } else {
       existing.quantity = requestedTotalQty;
       existing.priceSnapshot = product.price;
       existing.name = product.name;
+      existing.merchantId = product.merchant.id;
+      existing.sku = product.sku;
     }
 
     return { ok: true, cart: toCartDTO(context.cart) };
@@ -209,7 +223,7 @@ export const CART_TOOL_EXECUTORS = {
       // Stale item discovered mid-update — drop it rather than leaving a
       // ghost line the customer can no longer act on.
       context.cart.items = context.cart.items.filter((item) => item.productId !== args.productId);
-      releaseCurrencyLockIfEmpty(context.cart);
+      releaseLocksIfEmpty(context.cart);
       return { error: "PRODUCT_UNAVAILABLE", message: "This item is no longer available and was removed from your cart." };
     }
     if (validation.error) {
@@ -219,6 +233,8 @@ export const CART_TOOL_EXECUTORS = {
     existing.quantity = args.quantity;
     existing.priceSnapshot = validation.product.price;
     existing.name = validation.product.name;
+    existing.merchantId = validation.product.merchant.id;
+    existing.sku = validation.product.sku;
 
     return { ok: true, cart: toCartDTO(context.cart) };
   },
@@ -240,7 +256,7 @@ export const CART_TOOL_EXECUTORS = {
     }
 
     context.cart.items = context.cart.items.filter((item) => item.productId !== args.productId);
-    releaseCurrencyLockIfEmpty(context.cart);
+    releaseLocksIfEmpty(context.cart);
 
     return { ok: true, cart: toCartDTO(context.cart) };
   },
@@ -313,11 +329,46 @@ export async function revalidateCart(cart) {
       item.priceSnapshot = product.price;
     }
     item.name = product.name;
+    item.merchantId = product.merchant.id;
+    item.sku = product.sku;
     if (product.availability !== "IN_STOCK") {
       blockedByProductId[item.productId] = product.availability === "OUT_OF_STOCK" ? "OUT_OF_STOCK" : "AVAILABILITY_UNCONFIRMED";
     }
   }
-  releaseCurrencyLockIfEmpty(cart);
+  releaseLocksIfEmpty(cart);
 
   return { cart: toCartDTO(cart, blockedByProductId), removed, priceChanges, blockedByProductId };
+}
+
+// Payment-specific revalidation (Phase 4A): everything revalidateCart above
+// already does, PLUS an explicit re-check that each surviving item's
+// quantity is still supported by CURRENT trusted stock. revalidateCart is
+// intentionally lighter (used by the read-only view_cart/request_checkout,
+// unchanged here) — a real payment must never proceed on a quantity that's
+// no longer available, even if availability itself is still IN_STOCK.
+export async function validateCartForCheckout(cart) {
+  const base = await revalidateCart(cart);
+  const insufficientStock = [];
+
+  for (const item of cart.items) {
+    if (base.blockedByProductId[item.productId]) continue; // already OUT_OF_STOCK/UNKNOWN, reported separately
+
+    const product = await getApprovedProductById(item.productId);
+    if (!product) continue; // already removed above
+
+    if (product.stockQuantity === null) {
+      if (item.quantity > 1) {
+        insufficientStock.push({ productId: item.productId, name: item.name, requestedQuantity: item.quantity, availableQuantity: null });
+      }
+    } else if (item.quantity > product.stockQuantity) {
+      insufficientStock.push({
+        productId: item.productId,
+        name: item.name,
+        requestedQuantity: item.quantity,
+        availableQuantity: product.stockQuantity,
+      });
+    }
+  }
+
+  return { ...base, insufficientStock };
 }

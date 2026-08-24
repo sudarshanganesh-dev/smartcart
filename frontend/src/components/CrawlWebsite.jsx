@@ -107,6 +107,7 @@ function CrawlWebsite({ merchant, onBack, onDone, onSelectUpload, onSelectManual
 
           <input
             type="url"
+            aria-label="Website URL"
             placeholder="https://your-store.example.com"
             value={url}
             onChange={(e) => setUrl(e.target.value)}

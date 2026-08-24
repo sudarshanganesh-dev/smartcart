@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Opportunity" ALTER COLUMN "lastSeenAt" SET DEFAULT CURRENT_TIMESTAMP;

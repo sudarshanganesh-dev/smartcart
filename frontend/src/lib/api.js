@@ -103,6 +103,83 @@ export async function sendChatMessage(conversationId, message) {
   })
 }
 
+// Phase 4A: the frontend sends only conversationId — amount/currency/cart
+// contents are never supplied by the client, matching the backend contract.
+export async function createCheckoutOrder(conversationId) {
+  return request('/api/checkout/create-order', {
+    method: 'POST',
+    body: JSON.stringify({ conversationId }),
+  })
+}
+
+export async function verifyPayment(payload) {
+  return request('/api/checkout/verify-payment', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+// Deterministic "Add all to cart" action for a SmartCart Plan — a dedicated
+// endpoint outside the chat/Gemini loop, the same way createCheckoutOrder is.
+export async function addBundleToCart(conversationId) {
+  return request('/api/customer/bundle/add-all', {
+    method: 'POST',
+    body: JSON.stringify({ conversationId }),
+  })
+}
+
+// Phase 5: read-only merchant order visibility. Money stays exact decimal
+// strings end to end, same reasoning as sendChatMessage — never run through
+// normalizeProduct()'s float coercion.
+export async function getOrders(merchantId, status) {
+  const query = status ? `?status=${encodeURIComponent(status)}` : ''
+  return request(`/api/merchants/${merchantId}/orders${query}`)
+}
+
+export async function getOrder(merchantId, orderId) {
+  return request(`/api/merchants/${merchantId}/orders/${orderId}`)
+}
+
+// Phase 7: read-only opportunity visibility + lifecycle actions. Money/score
+// fields stay exact decimal strings / plain integers straight from the
+// backend, same reasoning as getOrders — never run through normalizeProduct().
+export async function getOpportunities(merchantId, status) {
+  const query = status ? `?status=${encodeURIComponent(status)}` : ''
+  return request(`/api/merchants/${merchantId}/opportunities${query}`)
+}
+
+export async function getOpportunity(merchantId, opportunityId) {
+  return request(`/api/merchants/${merchantId}/opportunities/${opportunityId}`)
+}
+
+export async function dismissOpportunity(merchantId, opportunityId) {
+  return request(`/api/merchants/${merchantId}/opportunities/${opportunityId}/dismiss`, {
+    method: 'POST',
+  })
+}
+
+export async function generateOpportunityDraft(merchantId, opportunityId) {
+  return request(`/api/merchants/${merchantId}/opportunities/${opportunityId}/generate-draft`, {
+    method: 'POST',
+  })
+}
+
+// Phase 8: read-only dashboard aggregation for the Merchant Overview page.
+export async function getDashboardSummary(merchantId) {
+  return request(`/api/merchants/${merchantId}/dashboard-summary`)
+}
+
+// Phase 8 UX pass: customer-facing "My Orders" — a customer-safe view of
+// this store's orders (no Razorpay IDs, no internal fields). See
+// backend/src/routes/shopOrders.js for why this doesn't take a merchantId.
+export async function getShopOrders() {
+  return request('/api/shop/orders')
+}
+
+export async function getShopOrder(orderId) {
+  return request(`/api/shop/orders/${orderId}`)
+}
+
 export async function importCatalog(merchantId, format, file) {
   const formData = new FormData()
   formData.append('format', format)

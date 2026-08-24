@@ -10,10 +10,18 @@ import {
 import { isSkuConflictError, sendSkuConflict } from "../lib/prismaErrors.js";
 import { MAX_IMPORT_FILE_SIZE_BYTES, importCatalogFile } from "../lib/catalogImport.js";
 import { crawlSite } from "../lib/crawler/crawlSite.js";
+import { crawlLimiter, uploadLimiter } from "../lib/rateLimit.js";
 
 export const productsRouter = Router({ mergeParams: true });
 
 const STATUS_VALUES = ["PENDING_REVIEW", "APPROVED", "REJECTED"];
+// Defensive cap on the merchant catalog list, matching the bound already
+// applied to the Order list — not because a real problem was observed, just
+// consistency against unbounded growth.
+const MAX_LIST_RESULTS = 500;
+// Cheap defense-in-depth ahead of the SSRF checks — no legitimate storefront
+// URL is anywhere near this long.
+const MAX_CRAWL_URL_LENGTH = 2048;
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -59,6 +67,7 @@ productsRouter.get("/", async (req, res) => {
       ...(status ? { status } : {}),
     },
     orderBy: { createdAt: "desc" },
+    take: MAX_LIST_RESULTS,
   });
 
   res.json(products);
@@ -68,7 +77,7 @@ productsRouter.post("/", async (req, res) => {
   // Manual creation requires complete commerce fields up front, since the merchant is
   // entering the data directly. Future CRAWL/FILE_UPLOAD ingestion will intentionally
   // allow incomplete records and must not pass requireCommerceFields here.
-  const { errors, data } = validateProductInput(req.body, { partial: false, requireCommerceFields: true });
+  const { errors, data } = validateProductInput(req.body || {}, { partial: false, requireCommerceFields: true });
 
   if (errors.length > 0) {
     return res.status(422).json({ error: "VALIDATION_FAILED", details: errors });
@@ -89,12 +98,12 @@ productsRouter.post("/", async (req, res) => {
     if (isSkuConflictError(error)) {
       return sendSkuConflict(res);
     }
-    console.error("Failed to create product:", error);
+    console.error("Failed to create product:", error.message);
     res.status(500).json({ error: "INTERNAL_ERROR" });
   }
 });
 
-productsRouter.post("/import", handleFileUpload, async (req, res) => {
+productsRouter.post("/import", uploadLimiter, handleFileUpload, async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "FILE_REQUIRED" });
   }
@@ -117,14 +126,14 @@ productsRouter.post("/import", handleFileUpload, async (req, res) => {
 
     res.status(200).json(result.summary);
   } catch (error) {
-    console.error("Catalog import failed:", error);
+    console.error("Catalog import failed:", error.message);
     res.status(500).json({ error: "INTERNAL_ERROR" });
   }
 });
 
-productsRouter.post("/crawl", async (req, res) => {
+productsRouter.post("/crawl", crawlLimiter, async (req, res) => {
   const url = req.body?.url;
-  if (typeof url !== "string" || url.trim() === "") {
+  if (typeof url !== "string" || url.trim() === "" || url.length > MAX_CRAWL_URL_LENGTH) {
     return res.status(400).json({ error: "INVALID_URL" });
   }
 
@@ -138,7 +147,7 @@ productsRouter.post("/crawl", async (req, res) => {
 
     res.status(200).json(result.summary);
   } catch (error) {
-    console.error("Website crawl failed:", error);
+    console.error("Website crawl failed:", error.message);
     res.status(500).json({ error: "INTERNAL_ERROR" });
   }
 });
@@ -148,12 +157,13 @@ productsRouter.get("/:productId", loadProduct, (req, res) => {
 });
 
 productsRouter.patch("/:productId", loadProduct, async (req, res) => {
-  const disallowed = Object.keys(req.body).filter((key) => !EDITABLE_FIELDS.includes(key));
+  const body = req.body || {};
+  const disallowed = Object.keys(body).filter((key) => !EDITABLE_FIELDS.includes(key));
   if (disallowed.length > 0) {
     return res.status(422).json({ error: "VALIDATION_FAILED", details: [`fields not editable: ${disallowed.join(", ")}`] });
   }
 
-  const { errors, data } = validateProductInput(req.body, { partial: true });
+  const { errors, data } = validateProductInput(body, { partial: true });
 
   if (errors.length > 0) {
     return res.status(422).json({ error: "VALIDATION_FAILED", details: errors });
@@ -198,7 +208,7 @@ productsRouter.patch("/:productId", loadProduct, async (req, res) => {
     if (isSkuConflictError(error)) {
       return sendSkuConflict(res);
     }
-    console.error("Failed to update product:", error);
+    console.error("Failed to update product:", error.message);
     res.status(500).json({ error: "INTERNAL_ERROR" });
   }
 });

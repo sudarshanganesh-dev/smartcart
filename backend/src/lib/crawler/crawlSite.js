@@ -1,9 +1,8 @@
-import dns from "node:dns/promises";
 import { fetchSafely, MAX_RESPONSE_BYTES } from "./fetchSafely.js";
 import { discoverPages } from "./discoverPages.js";
 import { extractProductFromHtml } from "./extractProduct.js";
 import { loadRobotsRules, isPathDisallowed } from "./robotsTxt.js";
-import { isBlockedIp } from "./ssrfGuard.js";
+import { resolveAndCheckHost } from "./ssrfGuard.js";
 import { importNormalizedRows } from "../catalogImport.js";
 import { classifyCompatibility, classifyFetchErrorCode } from "./compatibilityResult.js";
 
@@ -53,11 +52,14 @@ export async function crawlSite({ url: rawUrl, merchantId }) {
   }
 
   try {
-    const addresses = await dns.lookup(url.hostname, { all: true });
-    if (addresses.some((address) => isBlockedIp(address.address))) {
+    // Reuses the same host-check ssrfGuard.js's fetchSafely() calls on every
+    // redirect hop, rather than a second hand-rolled DNS+block-list check —
+    // keeps this entry check and the per-redirect checks from ever drifting.
+    await resolveAndCheckHost(url.hostname);
+  } catch (error) {
+    if (error.message === "BLOCKED_IP") {
       return { batchError: { error: "URL_NOT_ALLOWED" } };
     }
-  } catch {
     return { batchError: { error: "UNREACHABLE", message: "We couldn't reach the website. Check the URL and try again." } };
   }
 

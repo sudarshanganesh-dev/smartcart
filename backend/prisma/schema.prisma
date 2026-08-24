@@ -17,6 +17,7 @@ enum ProductSourceType {
   MANUAL
   CRAWL
   FILE_UPLOAD
+  AI_OPPORTUNITY
 }
 
 enum ProductAvailability {
@@ -26,12 +27,15 @@ enum ProductAvailability {
 }
 
 model Merchant {
-  id        String    @id @default(cuid())
-  name      String
-  slug      String    @unique
-  products  Product[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id            String        @id @default(cuid())
+  name          String
+  slug          String        @unique
+  products      Product[]
+  orders        Order[]
+  demandEvents  DemandEvent[]
+  opportunities Opportunity[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 }
 
 model Product {
@@ -54,9 +58,196 @@ model Product {
   sourceType ProductSourceType
   sourceUrl  String?
 
+  // Phase 7: plain reference, not a Prisma relation — same reasoning as
+  // OrderItem.productId below. Set only when sourceType is AI_OPPORTUNITY.
+  originOpportunityId String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([merchantId, sku])
+  @@index([merchantId, status])
+}
+
+enum OrderStatus {
+  PAID
+  PAYMENT_PENDING
+}
+
+enum OrderPaymentStatus {
+  AUTHORIZED
+  CAPTURED
+}
+
+// Durable commerce order — a customer's completed (or authorized-pending)
+// purchase. Deliberately separate from Merchant/Product's cuid `id`: the
+// Razorpay Order (payment-gateway entity, razorpayOrderId) and this Commerce
+// Order (our own durable purchase record) are two different concepts.
+model Order {
+  id             String  @id @default(cuid())
+  // Native Postgres sequence — atomically unique under any concurrency,
+  // used only to derive the human-readable orderNumber below.
+  sequenceNumber Int     @default(autoincrement())
+  // Nullable at the type level only because it's derived from
+  // sequenceNumber, which doesn't exist until the row is inserted — set to
+  // its real value in the same transaction immediately after, before any
+  // other request can observe the row. Never null once a transaction
+  // commits.
+  orderNumber    String? @unique
+
+  merchant   Merchant @relation(fields: [merchantId], references: [id])
+  merchantId String
+
+  // Best-effort link back to the conversation that produced this order —
+  // not a foreign key, since conversations are in-memory and never durable.
+  conversationId String?
+
+  status        OrderStatus
+  paymentStatus OrderPaymentStatus
+
+  currency String
+  subtotal Decimal @db.Decimal(10, 2)
+  total    Decimal @db.Decimal(10, 2) // === subtotal in Phase 4B (no tax/shipping yet)
+
+  // Razorpay identifiers — the durable idempotency boundary. A given
+  // Razorpay payment (or order) can never back more than one commerce Order.
+  razorpayOrderId   String @unique
+  razorpayPaymentId String @unique
+
+  items OrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Composite, not a plain merchantId index — the merchant Orders workspace
+  // always filters by merchantId (+ optional status) and sorts by
+  // createdAt desc; this lets Postgres satisfy that query from the index
+  // directly instead of sorting after the filter.
+  @@index([merchantId, createdAt])
+}
+
+// Immutable purchase-time snapshot of one line item. Deliberately NOT a
+// Prisma relation to Product (see productId below) — a historical order
+// must remain fully self-describing even after the product it references
+// is renamed, repriced, deleted, or rejected.
+model OrderItem {
+  id      String @id @default(cuid())
+  order   Order  @relation(fields: [orderId], references: [id])
+  orderId String
+
+  // Plain reference, not a foreign key — deleting/rejecting a Product must
+  // never cascade into or be blocked by historical order data.
+  productId  String?
+  // Denormalized; always equals Order.merchantId under the one-merchant-
+  // per-order rule (see cartTools.js's merchant lock), kept here so an
+  // OrderItem is self-describing on its own.
+  merchantId String
+
+  productName String // snapshot — never re-read from current Product.name
+  sku         String? // snapshot
+  unitPrice   Decimal @db.Decimal(10, 2) // snapshot — never re-read from current Product.price
+  quantity    Int
+  lineTotal   Decimal @db.Decimal(10, 2) // snapshot
+
+  @@index([orderId])
+}
+
+// Phase 7 — Intelligence Layer.
+//
+// DemandEvent is an immutable, backend-only fact log: one row per real,
+// merchant-attributable buyer failure. Never written from a public endpoint
+// — only ever from server-side instrumentation of real buyer-agent outcomes
+// (see buyerAgent.js). Deliberately holds no raw conversation text, no
+// customer PII — only normalized structured intent facts.
+enum DemandFailureReason {
+  NO_MATCH
+  OUT_OF_STOCK
+  INSUFFICIENT_STOCK
+  NO_MORE_OPTIONS
+}
+
+model DemandEvent {
+  id         String   @id @default(cuid())
+  merchant   Merchant @relation(fields: [merchantId], references: [id])
+  merchantId String
+
+  // Required: the in-memory buyer conversation's own random UUID (already
+  // non-identifying by construction elsewhere in this codebase). Durable
+  // dedup below depends on this always being present for a buyer-generated
+  // event.
+  conversationId String
+
+  reason   DemandFailureReason
+  // Deterministic cluster key computed once at write time (see
+  // demandService.js's computeGroupKey) — lets Opportunity aggregation
+  // GROUP BY this column instead of fuzzy-matching text at read time.
+  groupKey String
+
+  queryText         String?  @db.VarChar(200) // only set when no category filter was given
+  category          String?
+  minPrice          Decimal? @db.Decimal(10, 2)
+  maxPrice          Decimal? @db.Decimal(10, 2)
+  // Deterministic budget band derived from maxPrice at write time (see
+  // demandService.js's budgetBand()) — stored directly, not just embedded
+  // in groupKey, so it's visible/queryable without parsing the key string.
+  // Only meaningful for NO_MATCH/NO_MORE_OPTIONS; null for stock reasons.
+  budgetBand        String?
+  requestedQuantity Int?
+  // Plain reference, not a foreign key — same reasoning as OrderItem.productId.
+  productId         String?
+  availableQuantity Int?
+
+  // Snapshotted once, at write time, using the project's exact-money
+  // conventions — never recomputed later, never a JS float. Null whenever
+  // there is no defensible numeric basis (see demandService.js).
+  estimatedValue Decimal? @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now())
+
+  // Durable dedup guarantee: same conversation + same demand group can never
+  // produce more than one row, regardless of model/tool retries. The
+  // in-memory recordedDemandGroupKeys Set is only a fast path in front of
+  // this constraint, never a substitute for it.
+  @@unique([conversationId, groupKey])
+  @@index([merchantId, groupKey, createdAt])
+}
+
+enum OpportunityStatus {
+  OPEN
+  ACTIONED
+  DISMISSED
+}
+
+// Durable state/linkage only — count, recency, and score are always
+// computed live from DemandEvent (see opportunityService.js), never cached
+// here, so they can never go stale.
+model Opportunity {
+  id         String   @id @default(cuid())
+  merchant   Merchant @relation(fields: [merchantId], references: [id])
+  merchantId String
+
+  groupKey String // matches DemandEvent.groupKey
+  reason   DemandFailureReason // denormalized copy — avoids a join just to filter/label
+
+  status      OpportunityStatus @default(OPEN)
+  dismissedAt DateTime?
+  actionedAt  DateTime?
+
+  // Snapshotted once, at the moment status -> ACTIONED, from a live COUNT of
+  // this group's DemandEvents. Never updated again — lets the UI show
+  // "N signals before this was actioned, M since" without a new lifecycle
+  // state. Null until actioned.
+  signalCountAtAction Int?
+
+  // Plain reference, not a foreign key — same reasoning as OrderItem.productId.
+  generatedProductId String?
+
+  firstSeenAt DateTime @default(now())
+  // Explicitly set (not @updatedAt) — demandService.js sets this on every
+  // new qualifying DemandEvent for this groupKey; @updatedAt does not fire
+  // reliably on an update call with no other field changing.
+  lastSeenAt  DateTime @default(now())
+
+  @@unique([merchantId, groupKey])
   @@index([merchantId, status])
 }

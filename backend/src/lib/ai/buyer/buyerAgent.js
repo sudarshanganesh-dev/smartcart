@@ -2,8 +2,13 @@ import { randomUUID } from "node:crypto";
 import { sendChat } from "./provider.js";
 import { TOOL_DEFINITIONS, TOOL_EXECUTORS, extractProductIds } from "./tools.js";
 import { CART_TOOL_DEFINITIONS, CART_TOOL_EXECUTORS, resolveCheckoutOutcome } from "./cartTools.js";
-import { createEmptyCart, toCartDTO } from "./cart.js";
+import { PROPOSE_BUNDLE_TOOL, PROPOSE_BUNDLE_TOOL_NAME, resolveBundleProposalWithOptimizer } from "./bundleTools.js";
+import { createEmptyCart, toCartDTO, findCartItem } from "./cart.js";
+import { buildWhyFacts } from "./explain.js";
 import { SYSTEM_PROMPT } from "./systemPrompt.js";
+import { getApprovedProductById } from "../../commerceService.js";
+import { recordNoMatchDemandEvent, recordNoMoreOptionsDemandEvent, recordStockDemandEvent } from "../../intelligence/demandService.js";
+import { findPriceAlternative, findStockAlternative } from "../../intelligence/conversionRecovery.js";
 
 // Smallest useful in-memory conversation state — no Redis, no DB, no
 // persistence across a server restart. Bounded on every axis so a long or
@@ -14,8 +19,12 @@ const MAX_MESSAGES_PER_CONVERSATION = 20; // neutral turns, not raw provider tok
 // call (including the finishing respond_to_customer call) means the final
 // answer now always consumes its own iteration slot rather than arriving as
 // free text, so a legitimate search + one retry + finalize sequence needs
-// the extra room.
-const MAX_TOOL_ITERATIONS = 6;
+// the extra room. Raised from 6 to 8 after live testing showed a real
+// goal-shopping turn (several search_products angles + up to
+// MAX_BUNDLE_ATTEMPTS propose_bundle tries + the finishing call) can
+// legitimately need exactly 6, leaving zero margin and occasionally running
+// out before respond_to_customer is ever reached.
+const MAX_TOOL_ITERATIONS = 8;
 // The system prompt asks the model to retry an empty search at most once,
 // but that's a soft instruction the model doesn't always honor (observed
 // retrying 4+ different search terms in testing). Enforced here instead:
@@ -23,6 +32,13 @@ const MAX_TOOL_ITERATIONS = 6;
 // tool set for the next call is shrunk to just the finishing tool, which
 // deterministically forces a finalize since it's the only option left.
 const MAX_EMPTY_SEARCH_ATTEMPTS = 2;
+// Same idea as MAX_EMPTY_SEARCH_ATTEMPTS: once propose_bundle has failed
+// (invalid items, mixed merchants, over budget, ...) this many times in one
+// turn, the tool set shrinks to just the finishing tool so the model is
+// forced to honestly report it couldn't find a good combination instead of
+// retrying indefinitely (MAX_TOOL_ITERATIONS already bounds this too, but a
+// dedicated cap gives a cleaner, earlier honest answer).
+const MAX_BUNDLE_ATTEMPTS = 2;
 // How many products are actually shown to the customer per presentation —
 // the model may retrieve up to 10 candidates (tools.js), but only ever this
 // many are ever displayed at once, whether on first presentation or a
@@ -170,10 +186,29 @@ function resolveDisplayAndCta({ searchContext, requestedIds, isRepeatSingle }) {
 }
 
 // Combines whatever happened this turn (a fresh search, a "show more"
-// selection against an existing context, a single-product detail lookup, or
-// none of those) into the one {products, followUp} the customer actually
-// sees.
-function resolveTurnOutcome({ searchOutcome, showMoreOutcome, discussedProduct, lastProducts, requestedProductIds, state }) {
+// selection against an existing context, a single-product detail lookup, a
+// successful goal-shopping plan, or none of those) into the one
+// {products, bundle, followUp} the customer actually sees. A successful plan
+// this turn always wins the display slot — it replaces the normal product
+// list rather than showing both, since the plan card is itself the complete
+// presentation of those same products.
+function resolveTurnOutcome({ searchOutcome, showMoreOutcome, discussedProduct, lastProducts, requestedProductIds, bundleOutcome, clarificationRequested, state }) {
+  if (clarificationRequested) {
+    // The clarifying question IS the entire reply — never paired with
+    // product cards from an earlier search_products call this same turn,
+    // which would send a contradictory signal right when SmartCart is
+    // deliberately asking rather than guessing.
+    return { products: [], bundle: null, followUp: null };
+  }
+
+  if (bundleOutcome) {
+    // No follow-up bubble here — the plan card itself carries the "Add all
+    // to cart" button, which is already the correct call to action. Adding
+    // a second, text-only "would you like me to add these?" would just be
+    // redundant with the button already on screen.
+    return { products: [], bundle: bundleOutcome.bundle, followUp: null };
+  }
+
   let outcome;
   if (searchOutcome) {
     const { display, followUp } = resolveDisplayAndCta({
@@ -195,16 +230,26 @@ function resolveTurnOutcome({ searchOutcome, showMoreOutcome, discussedProduct, 
     outcome = { products: [], followUp: null };
   }
 
+  // Deterministic "why this?" decoration — the same trusted filters already
+  // used for demand-event attribution, never anything Gemini claims. Kept
+  // as a late decoration step (not baked into commerceService's own DTO) so
+  // it stays purely additive and never touches product truth itself.
+  const filters = state.searchContext?.filters || {};
+  const decorated = outcome.products.map((product) => ({
+    ...product,
+    why: buildWhyFacts({ product, filters, maxBudget: filters.maxPrice ?? null }),
+  }));
+
   // Single point where "actually shown to the customer" is recorded — this
   // is the strict grounding set cart mutations require (see
   // isGroundedForMutation in cartTools.js), distinct from and narrower than
   // knownProductIds (which also includes hidden, never-displayed candidates
   // from a search's larger retrieval batch).
-  for (const product of outcome.products) {
+  for (const product of decorated) {
     if (product && product.id) state.everShownProductIds.add(product.id);
   }
 
-  return outcome;
+  return { products: decorated, bundle: null, followUp: outcome.followUp };
 }
 
 function getOrCreateConversation(conversationId) {
@@ -222,7 +267,24 @@ function getOrCreateConversation(conversationId) {
     everShownProductIds: new Set(),
     searchContext: null,
     lastSingleCandidateId: null,
+    // Goal-shopping plan (internal name: bundle) — persists across turns
+    // the same way searchContext does, so a later "Add all to cart" click
+    // (a deterministic action, not itself a chat turn) still has the exact
+    // validated plan to act on. Cleared once actually added (see
+    // addBundleToCartForConversation) or replaced by a newer plan.
+    bundleContext: null,
     cart: createEmptyCart(),
+    // Phase 7: in-memory fast-path dedup for demand-event recording — the
+    // durable @@unique([conversationId, groupKey]) constraint is the real
+    // guarantee; this just avoids a redundant write attempt within the same
+    // conversation.
+    recordedDemandGroupKeys: new Set(),
+    // Persists across turns (bugfix): readiness must survive an unrelated
+    // message ("start", a question, small talk) between "checkout" and the
+    // customer actually clicking the button — it's only invalidated by an
+    // actual cart mutation (see cartMutationSucceeded below) or re-set by a
+    // fresh request_checkout call, never by the mere passage of a turn.
+    checkoutReady: false,
   };
   conversations.set(id, state);
   if (conversations.size > MAX_CONVERSATIONS) {
@@ -230,6 +292,113 @@ function getOrCreateConversation(conversationId) {
     conversations.delete(oldestKey);
   }
   return { id, state };
+}
+
+// Read-only accessor for the checkout route (Phase 4A) — returns the SAME
+// live cart object the buyer agent mutates, never a copy, so revalidation
+// performed by the checkout route (via cartTools.js's revalidateCart)
+// persists back to this conversation exactly like view_cart/request_checkout
+// already do. Returns null for an unknown conversationId; never creates one.
+export function getCartForConversation(conversationId) {
+  const state = conversations.get(conversationId);
+  return state ? state.cart : null;
+}
+
+// Called only after successful backend payment-signature verification
+// (Phase 4A Decision 3) — never from a frontend callback, modal dismissal,
+// or create-order success. Resets to an empty cart; does nothing for an
+// unknown conversationId.
+export function clearCartForConversation(conversationId) {
+  const state = conversations.get(conversationId);
+  if (state) state.cart = createEmptyCart();
+}
+
+// Deterministic, non-Gemini action behind the "Add all to cart" button —
+// mirrors how "Proceed to payment" is a dedicated button outside the chat
+// loop, for the same reason: a wrong/partial multi-item mutation here would
+// be a real problem, so it never goes through anything Gemini says.
+//
+// Two passes, never one: first re-validate EVERY item's current trusted
+// state without mutating anything, then only apply if all of them pass —
+// so the cart never ends up with half of a plan silently added. Reuses the
+// exact same validation add_to_cart itself performs; nothing here is a
+// parallel/looser copy of those rules.
+export async function addBundleToCartForConversation(conversationId) {
+  const state = conversations.get(conversationId);
+  if (!state) return { error: "UNKNOWN_CONVERSATION" };
+
+  const bundle = state.bundleContext;
+  if (!bundle || !Array.isArray(bundle.items) || bundle.items.length === 0) {
+    return { error: "NO_ACTIVE_PLAN" };
+  }
+
+  const blockers = [];
+  for (const item of bundle.items) {
+    const product = await getApprovedProductById(item.productId);
+    if (!product) {
+      blockers.push({ productId: item.productId, name: item.name, reason: "PRODUCT_UNAVAILABLE", message: "This product is no longer available." });
+      continue;
+    }
+    if (product.availability === "OUT_OF_STOCK") {
+      blockers.push({ productId: item.productId, name: item.name, reason: "OUT_OF_STOCK", message: "This product is currently out of stock." });
+      continue;
+    }
+    const existing = findCartItem(state.cart, item.productId);
+    const requestedTotalQty = (existing ? existing.quantity : 0) + item.quantity;
+    if (product.availability === "UNKNOWN" && requestedTotalQty > 1) {
+      blockers.push({
+        productId: item.productId,
+        name: item.name,
+        reason: "QUANTITY_UNCONFIRMED",
+        message: "The available quantity isn't confirmed, so only one can be added.",
+      });
+      continue;
+    }
+    if (product.stockQuantity !== null && requestedTotalQty > product.stockQuantity) {
+      blockers.push({
+        productId: item.productId,
+        name: item.name,
+        reason: "QUANTITY_EXCEEDS_STOCK",
+        message: `Only ${product.stockQuantity} of this item are available.`,
+      });
+      continue;
+    }
+    if (state.cart.currency !== null && state.cart.currency !== product.currency) {
+      blockers.push({ productId: item.productId, name: item.name, reason: "CURRENCY_CONFLICT", message: "This cart already contains items priced in a different currency." });
+      continue;
+    }
+    if (state.cart.merchantId !== null && state.cart.merchantId !== product.merchant.id) {
+      blockers.push({ productId: item.productId, name: item.name, reason: "MERCHANT_CONFLICT", message: "This cart already contains items from a different merchant." });
+    }
+  }
+
+  if (blockers.length > 0) {
+    return { error: "PLAN_ITEM_INVALID", blockers, cart: toCartDTO(state.cart) };
+  }
+
+  for (const item of bundle.items) {
+    const result = await CART_TOOL_EXECUTORS.add_to_cart(
+      { productId: item.productId, quantity: item.quantity },
+      { cart: state.cart, everShownProductIds: state.everShownProductIds }
+    );
+    if (!result.ok) {
+      // Extremely unlikely right after the pre-check pass above, but never
+      // leave a half-applied cart if current state somehow still changed.
+      return {
+        error: "PLAN_ITEM_INVALID",
+        blockers: [{ productId: item.productId, name: item.name, reason: result.error, message: result.message }],
+        cart: toCartDTO(state.cart),
+      };
+    }
+  }
+
+  // Any real cart mutation invalidates prior checkout readiness (same rule
+  // as every other cart-mutating tool) — and the actioned plan itself is
+  // cleared so a stale plan can't be re-added a second time.
+  state.checkoutReady = false;
+  state.bundleContext = null;
+
+  return { ok: true, cart: toCartDTO(state.cart) };
 }
 
 // A naive slice(-N) can cut in the middle of a turn — between a model
@@ -310,12 +479,34 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
   let emptySearchCount = 0;
   let checkoutOutcome = null; // set immediately when request_checkout is called; short-circuits everything else
   let cartMutationSucceeded = false; // true if add_to_cart/update_cart_item actually succeeded this turn
+  let bundleOutcome = null; // {bundle} on the most recent successful propose_bundle call this turn, else null
+  let bundleAttemptCount = 0;
+  let bundleToShow = null; // the plan actually returned to the customer this turn, if any
+  // True when propose_bundle returned NEEDS_CLARIFICATION this turn — this
+  // deliberately suppresses normal product/plan display for the turn
+  // (see resolveTurnOutcome), so the customer sees ONLY the clarifying
+  // question, never a contradictory product list from an earlier
+  // search_products call in the same turn.
+  let clarificationRequested = false;
+  // Every distinct real, APPROVED product SmartCart's search_products calls
+  // returned THIS turn, keyed by id — this is the grounded candidate pool
+  // the Decision Engine (planOptimizer.js, via bundleTools.js) selects the
+  // final plan from, and also what the trace's "checked" count reflects.
+  // Populated unconditionally for every search_products call this turn,
+  // regardless of which one becomes the "active" display context.
+  const turnCheckedProducts = new Map();
+  // True once any search_products call THIS turn has returned real
+  // candidates — guards against a later, genuinely-empty search for a
+  // different angle (e.g. goal-shopping searching "coffee" then
+  // "chocolate") from erasing an earlier successful one within the same
+  // turn (see the search_products handling below).
+  let searchSucceededThisTurn = false;
 
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
     const tools =
-      emptySearchCount >= MAX_EMPTY_SEARCH_ATTEMPTS
+      emptySearchCount >= MAX_EMPTY_SEARCH_ATTEMPTS || bundleAttemptCount >= MAX_BUNDLE_ATTEMPTS
         ? [RESPOND_TOOL]
-        : [...TOOL_DEFINITIONS, RESPOND_TOOL, SHOW_MORE_TOOL, ...CART_TOOL_DEFINITIONS, REQUEST_CHECKOUT_TOOL];
+        : [...TOOL_DEFINITIONS, RESPOND_TOOL, SHOW_MORE_TOOL, ...CART_TOOL_DEFINITIONS, REQUEST_CHECKOUT_TOOL, PROPOSE_BUNDLE_TOOL];
     const result = await sendChatFn({
       messages: state.messages,
       tools,
@@ -330,8 +521,10 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
         conversationId: id,
         message: describeProviderError(result.code),
         products: [],
+        bundle: null,
         followUp: null,
         cart: toCartDTO(state.cart),
+        checkoutReady: state.checkoutReady, // a transient provider error doesn't invalidate prior readiness
       };
     }
 
@@ -347,9 +540,12 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
         discussedProduct,
         lastProducts,
         requestedProductIds,
+        bundleOutcome,
+        clarificationRequested,
         state,
       });
       lastProducts = outcome.products;
+      bundleToShow = outcome.bundle;
       finalFollowUp = cartMutationSucceeded ? CHECKOUT_OR_CONTINUE_CTA : outcome.followUp;
       state.messages.push({ role: "assistant", text: finalText });
       break;
@@ -391,11 +587,55 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
               exhausted: Boolean(showMoreOutcome.exhausted),
             },
           });
+          if (showMoreOutcome.exhausted) {
+            try {
+              await recordNoMoreOptionsDemandEvent({ conversationId: id, searchContext: state.searchContext }, state);
+            } catch (error) {
+              console.error("[buyer-agent] demand recording failed:", error.message);
+            }
+          }
         } else {
           showMoreOutcome = { display: [], followUp: null };
           responses.push({ id: call.id, name: call.name, result: { error: "NO_ACTIVE_SEARCH_CONTEXT" } });
         }
         toolCallLog.push({ name: call.name, outcome: "OK" });
+        continue;
+      }
+
+      if (call.name === PROPOSE_BUNDLE_TOOL_NAME) {
+        const bundleResult = await resolveBundleProposalWithOptimizer(call.args || {}, {
+          cart: state.cart,
+          knownProductIds: state.knownProductIds,
+          checkedProducts: [...turnCheckedProducts.values()],
+        });
+        bundleAttemptCount += 1;
+        if (bundleResult.ok) {
+          state.bundleContext = bundleResult.bundle;
+          for (const item of bundleResult.bundle.items) {
+            state.knownProductIds.add(item.productId);
+            state.everShownProductIds.add(item.productId);
+          }
+          bundleOutcome = { bundle: bundleResult.bundle };
+          responses.push({ id: call.id, name: call.name, result: { ok: true, bundle: bundleResult.bundle } });
+        } else {
+          // A failed attempt always overwrites any earlier one this turn —
+          // same "latest attempt is the truth" rule search_products already
+          // follows, even when that latest attempt is empty/invalid.
+          bundleOutcome = null;
+          if (bundleResult.error === "NEEDS_CLARIFICATION") {
+            clarificationRequested = true;
+          }
+          responses.push({
+            id: call.id,
+            name: call.name,
+            result: {
+              error: bundleResult.error,
+              message: bundleResult.message,
+              ...(bundleResult.total ? { total: bundleResult.total, maxBudget: bundleResult.maxBudget } : {}),
+            },
+          });
+        }
+        toolCallLog.push({ name: call.name, outcome: bundleResult.ok ? "OK" : bundleResult.error });
         continue;
       }
 
@@ -419,6 +659,60 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
         }
         if (cartResult.ok && (call.name === "add_to_cart" || call.name === "update_cart_item")) {
           cartMutationSucceeded = true;
+        }
+        if (cartResult.ok) {
+          // Any real cart mutation (including removal) invalidates prior
+          // checkout readiness — the customer must request_checkout again
+          // to re-confirm before the payment button reappears.
+          state.checkoutReady = false;
+        }
+        // Phase 7: Revenue Recovery — record a demand event for a real
+        // cart-stage failure. cartTools.js itself is untouched; this only
+        // re-reads the same trusted product data it already validated
+        // against, using the actual attempted quantity for this call.
+        if (
+          (cartResult.error === "OUT_OF_STOCK" || cartResult.error === "QUANTITY_EXCEEDS_STOCK") &&
+          (call.name === "add_to_cart" || call.name === "update_cart_item") &&
+          typeof call.args?.productId === "string"
+        ) {
+          try {
+            const product = await getApprovedProductById(call.args.productId);
+            if (product) {
+              const existing = findCartItem(state.cart, call.args.productId);
+              const requestedQuantity =
+                call.name === "update_cart_item"
+                  ? call.args.quantity
+                  : (existing ? existing.quantity : 0) + (Number.isInteger(call.args.quantity) ? call.args.quantity : 1);
+              await recordStockDemandEvent(
+                {
+                  conversationId: id,
+                  cartErrorCode: cartResult.error,
+                  product,
+                  requestedQuantity,
+                  availableQuantity: product.stockQuantity,
+                },
+                state
+              );
+              // Phase 7: Conversion Recovery for a cart-stage stock failure.
+              // The cart is merchant-locked (Phase 4B), so any alternative
+              // must come from the SAME merchant — never a different one.
+              const alternatives = await findStockAlternative({
+                merchantId: product.merchant.id,
+                category: product.category,
+                excludeProductId: product.id,
+                excludeIds: state.everShownProductIds,
+              });
+              if (alternatives.length > 0) {
+                cartResult.alternatives = alternatives;
+                for (const alt of alternatives) {
+                  state.knownProductIds.add(alt.id);
+                  state.everShownProductIds.add(alt.id);
+                }
+              }
+            }
+          } catch (error) {
+            console.error("[buyer-agent] demand recording failed:", error.message);
+          }
         }
         toolCallLog.push({ name: call.name, outcome: cartResult.error || "OK" });
         responses.push({ id: call.id, name: call.name, result: cartResult });
@@ -444,26 +738,89 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
       }
 
       if (call.name === "search_products" && Array.isArray(toolResult.products)) {
+        for (const product of toolResult.products) {
+          turnCheckedProducts.set(product.id, product);
+        }
         const candidateIds = toolResult.products.map((p) => p.id);
         const isRepeatSingle =
           candidateIds.length === 1 && priorSingleCandidateId !== null && candidateIds[0] === priorSingleCandidateId;
 
-        // A fresh search always starts a brand-new recommendation context —
-        // this is what makes a substantially different request (new budget,
-        // new category, ...) naturally discard stale candidates rather than
-        // needing separate "did the topic change" detection.
-        state.searchContext = {
-          candidateIds,
-          candidates: Object.fromEntries(toolResult.products.map((p) => [p.id, p])),
-          shownProductIds: new Set(),
-        };
-        state.lastSingleCandidateId = candidateIds.length === 1 ? candidateIds[0] : null;
-        searchOutcome = { isRepeatSingle };
+        // A fresh search normally starts a brand-new recommendation context
+        // — this is what makes a substantially different request (new
+        // budget, new category, ...) naturally discard stale candidates
+        // rather than needing separate "did the topic change" detection.
+        // EXCEPTION: if an earlier search_products call already succeeded
+        // THIS SAME turn (e.g. goal-shopping searching "coffee" then
+        // "chocolate", where the second angle has no match), a later empty
+        // result must not erase what was already found — the customer would
+        // otherwise see an empty product card under text that confidently
+        // described a real item. A later search that also succeeds still
+        // replaces the context as before (last real result wins).
+        const shouldReplaceContext = candidateIds.length > 0 || !searchSucceededThisTurn;
+        if (shouldReplaceContext) {
+          state.searchContext = {
+            candidateIds,
+            candidates: Object.fromEntries(toolResult.products.map((p) => [p.id, p])),
+            shownProductIds: new Set(),
+            // Phase 7: the filters that produced this search context, kept
+            // only for demand-event attribution/value (recordNoMoreOptionsDemandEvent) —
+            // never re-shown to the customer or the model. Reaching this point
+            // already proves minPrice/maxPrice (if present) passed tools.js's
+            // own parsePriceRange validation — otherwise toolResult.products
+            // would not exist and this whole branch would not run.
+            filters: {
+              query: call.args?.query,
+              category: call.args?.category,
+              merchantId: call.args?.merchantId,
+              minPrice: call.args?.minPrice,
+              maxPrice: call.args?.maxPrice,
+            },
+          };
+          state.lastSingleCandidateId = candidateIds.length === 1 ? candidateIds[0] : null;
+          searchOutcome = { isRepeatSingle };
+        }
 
         if (candidateIds.length === 0) {
           emptySearchCount += 1;
+          try {
+            await recordNoMatchDemandEvent(
+              {
+                conversationId: id,
+                merchantId: call.args?.merchantId,
+                category: call.args?.category,
+                query: call.args?.query,
+                minPrice: call.args?.minPrice,
+                maxPrice: call.args?.maxPrice,
+              },
+              state
+            );
+          } catch (error) {
+            console.error("[buyer-agent] demand recording failed:", error.message);
+          }
+          // Phase 7: Conversion Recovery — deterministic, no Gemini call.
+          // Budget (maxPrice) and merchant constraint (if any) are always
+          // preserved; only query wording/category scope are ever broadened.
+          try {
+            const alternatives = await findPriceAlternative({
+              merchantId: call.args?.merchantId,
+              category: call.args?.category,
+              query: call.args?.query,
+              maxPrice: call.args?.maxPrice,
+              excludeIds: state.everShownProductIds,
+            });
+            if (alternatives.length > 0) {
+              toolResult.alternatives = alternatives;
+              for (const alt of alternatives) {
+                state.knownProductIds.add(alt.id);
+                state.everShownProductIds.add(alt.id);
+              }
+            }
+          } catch (error) {
+            console.error("[buyer-agent] conversion recovery failed:", error.message);
+          }
         } else {
           emptySearchCount = 0;
+          searchSucceededThisTurn = true;
         }
       } else if (call.name === "get_product" && !toolResult.error) {
         lastProducts = [toolResult];
@@ -491,6 +848,8 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
       finalText = checkoutOutcome.message;
       finalFollowUp = null;
       lastProducts = [];
+      bundleToShow = null;
+      state.checkoutReady = checkoutOutcome.ready;
       break;
     }
 
@@ -504,9 +863,12 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
         discussedProduct,
         lastProducts,
         requestedProductIds,
+        bundleOutcome,
+        clarificationRequested,
         state,
       });
       lastProducts = outcome.products;
+      bundleToShow = outcome.bundle;
       // A successful cart mutation this turn always wins the CTA slot —
       // never fired merely because the model's own text sounds like a cart
       // update; only a real add_to_cart/update_cart_item success sets this.
@@ -521,6 +883,7 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
     finalText = "I'm having trouble completing that right now — could you try rephrasing?";
     finalFollowUp = null;
     lastProducts = [];
+    bundleToShow = null;
   }
 
   logTurn({
@@ -536,7 +899,9 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
     conversationId: id,
     message: finalText,
     products: lastProducts,
+    bundle: bundleToShow,
     followUp: finalFollowUp,
     cart: toCartDTO(state.cart),
+    checkoutReady: state.checkoutReady,
   };
 }

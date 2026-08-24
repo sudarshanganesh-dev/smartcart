@@ -1,10 +1,13 @@
 import { useState } from 'react'
+import { Sparkles } from 'lucide-react'
 import { ApiError } from '../lib/api.js'
+import { formatMoney } from '../lib/formatMoney.js'
 
 const SOURCE_LABELS = {
   MANUAL: 'Manual',
   FILE_UPLOAD: 'File Upload',
   CRAWL: 'Website Crawl',
+  AI_OPPORTUNITY: 'AI Generated',
 }
 
 const MISSING_FIELD_MESSAGES = {
@@ -19,7 +22,7 @@ const MISSING_FIELD_MESSAGES = {
 
 function formatPrice(product) {
   if (product.price === null) return 'Unknown'
-  return `${product.currency || ''} ${product.price}`.trim()
+  return formatMoney(product.price)
 }
 
 // Prefers the backend's own structured error data over any generic message,
@@ -100,10 +103,14 @@ function ProductList({ products, onEdit, onApprove, onReject, onDelete }) {
                 <span className={`status-badge status-badge--${product.status.toLowerCase()}`}>
                   {product.status.replace('_', ' ')}
                 </span>
-                <span className="source-badge">{SOURCE_LABELS[product.sourceType] || product.sourceType}</span>
+                <span className={`source-badge ${product.sourceType === 'AI_OPPORTUNITY' ? 'source-badge--ai' : ''}`}>
+                  {product.sourceType === 'AI_OPPORTUNITY' && <Sparkles size={11} strokeWidth={2.25} aria-hidden="true" />}
+                  {SOURCE_LABELS[product.sourceType] || product.sourceType}
+                  {product.sourceType === 'AI_OPPORTUNITY' && product.status === 'PENDING_REVIEW' && ' · Pending review'}
+                </span>
               </div>
               <div className="product-row__meta">
-                <span>{formatPrice(product)}</span>
+                <span className="num-tabular">{formatPrice(product)}</span>
                 <span>{product.category || 'Uncategorized'}</span>
                 <span>{product.sku ? `SKU: ${product.sku}` : 'No SKU'}</span>
                 <span>
@@ -119,6 +126,7 @@ function ProductList({ products, onEdit, onApprove, onReject, onDelete }) {
               </button>
               <button
                 type="button"
+                className="btn-primary"
                 disabled={!canReview || Boolean(state.acting)}
                 onClick={() => runAction(product, 'approve', (p) => onApprove(p))}
               >

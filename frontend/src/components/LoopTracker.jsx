@@ -1,15 +1,19 @@
-import { Search, Sparkles, CheckCircle2, ShoppingBag, IndianRupee, Check } from 'lucide-react'
+import { Search, Sparkles, CheckCircle2, ShoppingBag, IndianRupee, ShoppingCart, TrendingUp, Check } from 'lucide-react'
 
 // One icon per step, in order — purely decorative, never implies anything
 // the `done`/`value` flags (computed by the caller from real backend
-// fields) don't already say.
-const STEP_ICONS = [Search, Sparkles, CheckCircle2, ShoppingBag, IndianRupee]
+// fields) don't already say. First 5 entries serve the 5-step closed loop
+// (buildOpportunityLoopSteps); the 2 appended entries extend this purely
+// additively for the 7-step Growth Feed (buildGrowthFeedSteps) — the first
+// 5 indices are untouched so the original 5-step usage is unaffected.
+const STEP_ICONS = [Search, Sparkles, CheckCircle2, ShoppingBag, IndianRupee, ShoppingCart, TrendingUp]
 
 // Phase 8 premium pass — the closed-loop visual: People asked → AI made
-// product → You approved → Customer bought → Money earned. This is the
-// product's signature moment, so it gets a connected progress line, solid
-// completed-state nodes, and a visually stronger final "Money earned" step
-// — never anything the `steps` data itself doesn't support.
+// product → You approved → Customer bought → Money earned. Reused as-is
+// (Feature 2) for the 7-step Growth Feed. This is the product's signature
+// moment, so it gets a connected progress line, solid completed-state
+// nodes, and a visually stronger final step — never anything the `steps`
+// data itself doesn't support.
 function LoopTracker({ steps }) {
   const doneCount = steps.filter((step) => step.done).length
   const progressPercent = steps.length > 1 ? (Math.max(doneCount - 1, 0) / (steps.length - 1)) * 100 : 0

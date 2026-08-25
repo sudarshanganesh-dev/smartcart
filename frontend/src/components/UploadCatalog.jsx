@@ -78,7 +78,7 @@ function UploadCatalog({ merchant, onBack, onDone }) {
         <button type="button" className="link-button" onClick={onBack}>
           ← Back
         </button>
-        <h2>{merchant.name} — Upload Catalog</h2>
+        <h2>{merchant.name} - Upload Catalog</h2>
       </div>
 
       {stage === 'choose-format' && (

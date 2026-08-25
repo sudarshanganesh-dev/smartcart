@@ -17,21 +17,28 @@ function getClient() {
   return client;
 }
 
-const RESPONSE_SCHEMA = {
-  type: Type.OBJECT,
-  properties: {
-    type: { type: Type.STRING, enum: ["BUNDLE", "VARIANT"] },
-    name: { type: Type.STRING },
-    description: { type: Type.STRING },
-    componentProductIds: { type: Type.ARRAY, items: { type: Type.STRING } },
-  },
-  required: ["type", "name", "description", "componentProductIds"],
-};
+// Structurally constrains what Gemini can even return — not prompt
+// wording. When bundle evidence doesn't exist (currently: always, see
+// hasBundleEvidence in opportunityService.js), `allowedProposalTypes` is
+// `["VARIANT"]` and the enum below makes "BUNDLE" a value Gemini is
+// physically unable to emit for this call, never merely discouraged from.
+function buildResponseSchema(allowedProposalTypes) {
+  return {
+    type: Type.OBJECT,
+    properties: {
+      type: { type: Type.STRING, enum: allowedProposalTypes },
+      name: { type: Type.STRING },
+      description: { type: Type.STRING },
+      componentProductIds: { type: Type.ARRAY, items: { type: Type.STRING } },
+    },
+    required: ["type", "name", "description", "componentProductIds"],
+  };
+}
 
 // Returns { proposal } on success, or { error } — the caller (opportunityService)
 // treats every field of `proposal` as untrusted input and re-validates it
 // against real trusted data before anything is ever written.
-export async function proposeMerchandisingAction({ opportunitySummary, candidateProducts }) {
+export async function proposeMerchandisingAction({ opportunitySummary, candidateProducts, allowedProposalTypes }) {
   const genai = getClient();
   if (!genai) return { error: "PROVIDER_UNAVAILABLE" };
 
@@ -45,7 +52,7 @@ export async function proposeMerchandisingAction({ opportunitySummary, candidate
       config: {
         systemInstruction: { role: "system", parts: [{ text: MERCHANDISING_SYSTEM_PROMPT }] },
         responseMimeType: "application/json",
-        responseSchema: RESPONSE_SCHEMA,
+        responseSchema: buildResponseSchema(allowedProposalTypes && allowedProposalTypes.length > 0 ? allowedProposalTypes : ["VARIANT"]),
         maxOutputTokens: MAX_OUTPUT_TOKENS,
         abortSignal: controller.signal,
       },

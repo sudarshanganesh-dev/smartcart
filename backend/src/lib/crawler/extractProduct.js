@@ -216,7 +216,7 @@ async function resolvePrice($, warnings) {
         return price;
       }
     }
-    warnings.push("multiple price candidates found — could not confidently determine the product price");
+    warnings.push("multiple price candidates found - could not confidently determine the product price");
     return undefined;
   }
 
@@ -227,7 +227,7 @@ async function resolvePrice($, warnings) {
   }
 
   if (weak.length > 1) {
-    warnings.push("multiple price candidates found — could not confidently determine the product price");
+    warnings.push("multiple price candidates found - could not confidently determine the product price");
   }
 
   return undefined; // no evidence at all — stays unknown, no AI call, no extra warning

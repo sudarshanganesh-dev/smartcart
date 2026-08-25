@@ -11,9 +11,9 @@ function describeAddError(error) {
   const code = error?.body?.error
   switch (code) {
     case 'NO_ACTIVE_PLAN':
-      return { message: 'This plan is no longer active — ask SmartCart for a new one.', blockers: null }
+      return { message: 'This plan is no longer active - ask SmartCart for a new one.', blockers: null }
     case 'UNKNOWN_CONVERSATION':
-      return { message: 'This conversation has expired — start a new chat and ask again.', blockers: null }
+      return { message: 'This conversation has expired - start a new chat and ask again.', blockers: null }
     case 'PLAN_ITEM_INVALID':
       return { message: 'Something in this plan changed, so it could not be added.', blockers: error.body.blockers || null }
     default:

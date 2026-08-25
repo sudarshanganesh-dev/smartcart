@@ -1,5 +1,5 @@
 import { Sparkles } from 'lucide-react'
-import { REASON_LABELS, RECOMMENDATION_TEXT } from '../lib/opportunityCopy.js'
+import { REASON_LABELS } from '../lib/opportunityCopy.js'
 import { formatMoney } from '../lib/formatMoney.js'
 
 function OpportunityList({ opportunities, onSelect }) {
@@ -30,8 +30,8 @@ function OpportunityList({ opportunities, onSelect }) {
               <span className="opportunity-card__score">Priority {opportunity.score}</span>
               <span className="opportunity-card__reason">{REASON_LABELS[opportunity.reason] || opportunity.reason}</span>
             </div>
-            {RECOMMENDATION_TEXT[opportunity.reason] && (
-              <p className="opportunity-card__action">AI suggests: {RECOMMENDATION_TEXT[opportunity.reason]}</p>
+            {opportunity.suggestedAction?.label && (
+              <p className="opportunity-card__action">AI suggests: {opportunity.suggestedAction.label}</p>
             )}
           </button>
         </li>

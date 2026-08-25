@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Sparkles } from 'lucide-react'
 import { ApiError } from '../lib/api.js'
 import { formatMoney } from '../lib/formatMoney.js'
+import { describePriceViolation } from '../lib/pricePolicyMessages.js'
 
 const SOURCE_LABELS = {
   MANUAL: 'Manual',
@@ -28,7 +29,10 @@ function formatPrice(product) {
 // Prefers the backend's own structured error data over any generic message,
 // only falling back to a plain "Something went wrong" when nothing structured
 // came back at all (e.g. a real network failure, not a backend response).
-function describeApiError(error) {
+// `price` is the product's own current price (already known from the row
+// being acted on) — passed through so the price-policy message can name the
+// exact number that was rejected, via the shared describePriceViolation.
+function describeApiError(error, price) {
   if (!(error instanceof ApiError)) {
     return { heading: 'Something went wrong. Please try again.', items: [] }
   }
@@ -42,16 +46,30 @@ function describeApiError(error) {
     }
   }
 
+  if (body?.error === 'PRICE_VIOLATES_DEMAND_POLICY') {
+    return {
+      heading: "This price doesn't match observed buyer demand.",
+      items: (body.details || []).map((detail) => describePriceViolation(detail, price)),
+    }
+  }
+
+  if (body?.error === 'DEMAND_POLICY_UNVERIFIABLE') {
+    return {
+      heading: "SmartCart can't verify this product's original demand evidence anymore, so it can't be approved as-is.",
+      items: [],
+    }
+  }
+
   if (body?.details) {
     return { heading: 'Cannot save this product.', items: body.details }
   }
 
   if (error.status === 404) {
-    return { heading: 'This product could not be found — it may have already been deleted.', items: [] }
+    return { heading: 'This product could not be found - it may have already been deleted.', items: [] }
   }
 
   if (error.status === 409) {
-    return { heading: "This product's status changed — refreshing the list.", items: [] }
+    return { heading: "This product's status changed - refreshing the list.", items: [] }
   }
 
   if (body?.message) {
@@ -76,7 +94,7 @@ function ProductList({ products, onEdit, onApprove, onReject, onDelete }) {
     } catch (error) {
       setRowState((prev) => ({
         ...prev,
-        [product.id]: { acting: null, error: describeApiError(error), confirmingDelete: false },
+        [product.id]: { acting: null, error: describeApiError(error, product.price), confirmingDelete: false },
       }))
     }
   }

@@ -881,6 +881,39 @@ button:disabled {
 }
 
 /* ==========================================================================
+   Catalog landing
+   ========================================================================== */
+
+.catalog-landing {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.catalog-landing__view-products {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  padding: 16px 20px;
+}
+
+.catalog-landing__view-products h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.catalog-landing__view-products p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* ==========================================================================
    Ingestion choices
    ========================================================================== */
 
@@ -1242,12 +1275,6 @@ button:disabled {
   margin-bottom: 4px;
 }
 
-.opportunity-detail__why {
-  color: var(--text-h);
-  font-style: italic;
-  margin-bottom: 12px;
-}
-
 .opportunity-detail__loop {
   margin: 16px 0;
   padding: 16px;
@@ -1289,12 +1316,111 @@ button:disabled {
   font-size: 13px;
 }
 
-.opportunity-detail__generated {
+/* Deliberately plain: a bordered surface, not a gradient hero — this page
+   already has enough sections competing for attention without one of them
+   visually shouting louder than the rest. */
+.opportunity-detail__section {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 14px 16px;
-  margin: 12px 0;
+  padding: 12px 16px;
+  margin: 10px 0;
   background: var(--surface);
+}
+
+.opportunity-detail__section p {
+  margin: 4px 0;
+}
+
+.opportunity-detail__section-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.opportunity-detail__concentration {
+  margin: 12px 0;
+}
+
+.opportunity-detail__concentration ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.opportunity-detail__concentration li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.readiness-flags {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.readiness-flags__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 4px 0;
+}
+
+.readiness-flags__item--ok {
+  color: var(--success);
+}
+
+.readiness-flags__item--warn {
+  color: var(--warning);
+}
+
+/* Native <details>/<summary> disclosure — no JS state, no animation
+   library, keeps "How SmartCart calculated this" out of the way by default
+   without deleting any of the underlying explainability data. */
+.opportunity-detail__calc {
+  margin: 16px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 4px 16px;
+  background: var(--surface);
+}
+
+.opportunity-detail__calc summary {
+  cursor: pointer;
+  padding: 10px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.opportunity-detail__calc-body {
+  padding: 4px 0 12px;
+}
+
+.opportunity-detail__outcome {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-h);
 }
 
 /* ==========================================================================

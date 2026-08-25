@@ -25,6 +25,17 @@ function normalizeIntent(text) {
     .join(" ");
 }
 
+// Feature 2 correctness invariant — a NO_MATCH/NO_MORE_OPTIONS DemandEvent
+// with neither category nor queryText proves only "a price-only search
+// found nothing"; it names no product for SmartCart to act on. Reuses the
+// exact same normalization already used to build the groupKey's own intent
+// segment, so this is never a second, divergent notion of "intent" — and
+// since that intent segment is baked into the groupKey itself, every event
+// sharing one groupKey is uniformly actionable or uniformly not.
+export function hasActionableIntent(category, queryText) {
+  return Boolean(normalizeIntent(category || queryText || ""));
+}
+
 // Fixed, human-readable ceilings — deliberately NOT an LLM/fuzzy clustering.
 // "under 100" and "under 95" both fall in the same "<=100" band (same
 // opportunity); "under 100" and "under 500" fall in different bands
@@ -108,6 +119,17 @@ async function writeOne({ merchantId, conversationId, reason, groupKey, fields, 
   if (existing) {
     await prisma.opportunity.update({ where: { id: existing.id }, data: { lastSeenAt: new Date() } });
   } else if (count >= MIN_SIGNAL_THRESHOLD) {
+    // Correctness invariant: a price-only NO_MATCH/NO_MORE_OPTIONS cluster
+    // (no category, no queryText) never materializes a merchant-facing
+    // growth Opportunity — there is no product intent to act on. The
+    // DemandEvent write above still happened unconditionally, so this
+    // signal is fully preserved for analytics; it simply never becomes an
+    // actionable "create a product" card. Stock reasons are unaffected —
+    // they always carry a real productId, which is inherently actionable.
+    const isTextReason = reason === "NO_MATCH" || reason === "NO_MORE_OPTIONS";
+    if (isTextReason && !hasActionableIntent(fields.category, fields.queryText)) {
+      return;
+    }
     try {
       await prisma.opportunity.create({ data: { merchantId, groupKey, reason, status: "OPEN" } });
     } catch (error) {

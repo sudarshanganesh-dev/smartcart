@@ -112,7 +112,7 @@ function OverviewPage() {
                     {isPayment ? <CreditCard size={14} strokeWidth={2} /> : <Sparkles size={14} strokeWidth={2} />}
                   </span>
                   <span className="overview-activity__text">
-                    {isPayment ? `Payment received — ${item.label}` : `AI made a product — ${item.label}`}
+                    {isPayment ? `Payment received - ${item.label}` : `AI made a product - ${item.label}`}
                     {item.amount && <span className="num-tabular"> · {formatMoney(item.amount)}</span>}
                   </span>
                   <span className="field-hint overview-activity__time">{new Date(item.at).toLocaleString()}</span>

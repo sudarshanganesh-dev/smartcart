@@ -89,13 +89,13 @@ function CrawlWebsite({ merchant, onBack, onDone, onSelectUpload, onSelectManual
         <button type="button" className="link-button" onClick={onBack}>
           ← Back
         </button>
-        <h2>{merchant.name} — Crawl Website</h2>
+        <h2>{merchant.name} - Crawl Website</h2>
       </div>
 
       {(stage === 'input' || stage === 'processing') && (
         <form className="upload-file-picker" onSubmit={handleSubmit}>
           <p className="field-hint">
-            We look for structured product data first. Results vary by site — review everything in
+            We look for structured product data first. Results vary by site - review everything in
             Pending Review before approving.
           </p>
 
@@ -141,7 +141,7 @@ function CrawlWebsite({ merchant, onBack, onDone, onSelectUpload, onSelectManual
 
           <p className="field-hint">
             Discovery method: <strong>{summary.discoveryMethod}</strong>
-            {summary.stoppedEarly && ' — stopped early (crawl budget exhausted)'}
+            {summary.stoppedEarly && ' - stopped early (crawl budget exhausted)'}
           </p>
 
           <div className="upload-summary__counts">

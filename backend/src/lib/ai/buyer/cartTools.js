@@ -118,7 +118,7 @@ async function validateForQuantity(productId, requestedTotalQty) {
     // were a merchant or inventory limit, since it isn't one.
     return {
       error: "QUANTITY_EXCEEDS_TECHNICAL_LIMIT",
-      message: "That quantity is larger than this system currently supports — please try a smaller amount.",
+      message: "That quantity is larger than this system currently supports - please try a smaller amount.",
       product,
     };
   }
@@ -160,7 +160,7 @@ export const CART_TOOL_EXECUTORS = {
         // if the merchant or inventory were the reason.
         return {
           error: "CART_CAPACITY_EXCEEDED",
-          message: "This cart has reached its maximum number of distinct items for now — please remove something before adding more.",
+          message: "This cart has reached its maximum number of distinct items for now - please remove something before adding more.",
         };
       }
       if (context.cart.currency !== null && context.cart.currency !== product.currency) {
@@ -284,21 +284,21 @@ export async function resolveCheckoutOutcome(cart) {
       removed.length > 0
         ? ` ${removed.map((r) => r.name).join(", ")} ${removed.length === 1 ? "was" : "were"} removed because it's no longer available.`
         : "";
-    return { ready: false, message: `Your cart is empty — there's nothing to check out yet.${removedNote}`, cart: cartDTO };
+    return { ready: false, message: `Your cart is empty - there's nothing to check out yet.${removedNote}`, cart: cartDTO };
   }
 
   const blockedNames = cartDTO.items.filter((item) => item.blocked).map((item) => item.name);
   if (blockedNames.length > 0) {
     return {
       ready: false,
-      message: `Your cart isn't ready for checkout yet — ${blockedNames.join(", ")} ${blockedNames.length === 1 ? "is" : "are"} no longer available. Please remove ${blockedNames.length === 1 ? "it" : "them"}, or wait until it's back, before checking out.`,
+      message: `Your cart isn't ready for checkout yet - ${blockedNames.join(", ")} ${blockedNames.length === 1 ? "is" : "are"} no longer available. Please remove ${blockedNames.length === 1 ? "it" : "them"}, or wait until it's back, before checking out.`,
       cart: cartDTO,
     };
   }
 
   const priceNote =
     priceChanges.length > 0
-      ? ` Note: the price of ${priceChanges.map((p) => `${p.name} (${p.oldPrice} → ${p.newPrice})`).join(", ")} changed since you added it — the subtotal below already reflects the current price.`
+      ? ` Note: the price of ${priceChanges.map((p) => `${p.name} (${p.oldPrice} → ${p.newPrice})`).join(", ")} changed since you added it - the subtotal below already reflects the current price.`
       : "";
   const removedNote =
     removed.length > 0
@@ -307,7 +307,7 @@ export async function resolveCheckoutOutcome(cart) {
 
   return {
     ready: true,
-    message: `Your cart is ready for checkout — ${cartDTO.itemCount} item${cartDTO.itemCount === 1 ? "" : "s"}, subtotal ${cartDTO.currency} ${cartDTO.subtotal}. Payment has not been started yet.${priceNote}${removedNote}`,
+    message: `Your cart is ready for checkout - ${cartDTO.itemCount} item${cartDTO.itemCount === 1 ? "" : "s"}, subtotal ${cartDTO.currency} ${cartDTO.subtotal}. Payment has not been started yet.${priceNote}${removedNote}`,
     cart: cartDTO,
   };
 }

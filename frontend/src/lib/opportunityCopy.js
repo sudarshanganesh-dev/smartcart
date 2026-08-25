@@ -9,14 +9,14 @@ export const REASON_LABELS = {
   NO_MORE_OPTIONS: 'Wanted more choices',
 }
 
-// A short advisory sentence distinct from whyExplanation (which explains WHY
-// the opportunity exists) and from suggestedAction.label (a terse CTA).
-export const RECOMMENDATION_TEXT = {
-  NO_MATCH: 'Make a cheaper product or bundle for this.',
-  NO_MORE_OPTIONS: 'Add a few more choices in this category.',
-  OUT_OF_STOCK: 'Restock this to win back these sales.',
-  INSUFFICIENT_STOCK: 'Increase how much you keep in stock.',
-}
+// Feature 2 — frontend mirror of the backend's DRAFT_ELIGIBLE_ACTION_TYPES /
+// RESTOCK_ACTION_TYPES (opportunityService.js), kept as an independent copy
+// rather than shared code (same pattern already used for
+// isProductPurchasable). Gates which CTA the detail page shows for
+// opportunity.suggestedAction.type — the backend's deterministic
+// determineAction() is the single source of truth for the type itself.
+export const DRAFT_ELIGIBLE_ACTION_TYPES = ['CREATE_PRODUCT', 'CREATE_VARIANT', 'ADD_OPTION']
+export const RESTOCK_ACTION_TYPES = ['RESTOCK_PRODUCT', 'INCREASE_STOCK']
 
 // Display-only mirror of the backend's own humanizeBudgetBand
 // (opportunityService.js) — turns a stored band like "<=500" into the same

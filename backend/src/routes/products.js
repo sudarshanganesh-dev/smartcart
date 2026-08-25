@@ -8,6 +8,7 @@ import {
   COMMERCE_CRITICAL_FIELDS,
 } from "../lib/productValidation.js";
 import { isSkuConflictError, sendSkuConflict } from "../lib/prismaErrors.js";
+import { validateGeneratedProductPrice } from "../lib/intelligence/opportunityService.js";
 import { MAX_IMPORT_FILE_SIZE_BYTES, importCatalogFile } from "../lib/catalogImport.js";
 import { crawlSite } from "../lib/crawler/crawlSite.js";
 import { crawlLimiter, uploadLimiter } from "../lib/rateLimit.js";
@@ -184,6 +185,22 @@ productsRouter.patch("/:productId", loadProduct, async (req, res) => {
     return currentValue !== nextValue;
   });
 
+  // Growth Agent correctness fix — an AI-generated product's price must
+  // keep obeying its originating opportunity's demand-supported pricing
+  // policy for the rest of its life, not just at the moment it was drafted.
+  // No-ops entirely for MANUAL/CRAWL/FILE_UPLOAD products (see
+  // validateGeneratedProductPrice). Checked BEFORE the write — a rejected
+  // price change saves nothing.
+  if (changedFields.includes("price") && data.price !== null) {
+    const priceCheck = await validateGeneratedProductPrice({ product, candidatePrice: Number(data.price) });
+    if (priceCheck.status === "UNVERIFIABLE") {
+      return res.status(422).json({ error: "DEMAND_POLICY_UNVERIFIABLE" });
+    }
+    if (priceCheck.status === "CHECKED" && priceCheck.errors.length > 0) {
+      return res.status(422).json({ error: "PRICE_VIOLATES_DEMAND_POLICY", details: priceCheck.errors });
+    }
+  }
+
   let nextStatus = product.status;
 
   if (changedFields.length > 0) {
@@ -229,6 +246,22 @@ productsRouter.post("/:productId/approve", loadProduct, async (req, res) => {
 
   if (missing.length > 0) {
     return res.status(422).json({ error: "APPROVAL_REQUIREMENTS_NOT_MET", missing });
+  }
+
+  // Growth Agent correctness fix — the final, unbypassable gate. An
+  // AI-generated product must never become APPROVED/purchasable unless
+  // SmartCart can verify its price against its originating demand
+  // evidence — fail-closed (DEMAND_POLICY_UNVERIFIABLE), never fail-open,
+  // when that evidence can no longer be loaded at all.
+  const priceCheck = await validateGeneratedProductPrice({
+    product,
+    candidatePrice: product.price !== null ? Number(product.price) : null,
+  });
+  if (priceCheck.status === "UNVERIFIABLE") {
+    return res.status(422).json({ error: "DEMAND_POLICY_UNVERIFIABLE" });
+  }
+  if (priceCheck.status === "CHECKED" && priceCheck.errors.length > 0) {
+    return res.status(422).json({ error: "PRICE_VIOLATES_DEMAND_POLICY", details: priceCheck.errors });
   }
 
   const updated = await prisma.product.update({

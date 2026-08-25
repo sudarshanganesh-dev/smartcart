@@ -12,7 +12,7 @@ function DemandPulse({ signals }) {
       <h3 className="demand-pulse__title">AI buyers are looking for</h3>
 
       {signals.length === 0 ? (
-        <p className="empty-state">No AI buyer demand yet — it will show up here as customers shop.</p>
+        <p className="empty-state">No AI buyer demand yet - it will show up here as customers shop.</p>
       ) : (
         <ul className="demand-pulse__list">
           {signals.map((signal) => (

@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getOpportunities, getOpportunity, dismissOpportunity, generateOpportunityDraft, ApiError } from '../lib/api.js'
+import {
+  getOpportunities,
+  getOpportunity,
+  dismissOpportunity,
+  generateOpportunityDraft,
+  approveProduct,
+  rejectProduct,
+  ApiError,
+} from '../lib/api.js'
+import { describePriceViolation } from '../lib/pricePolicyMessages.js'
 import OpportunityList from './OpportunityList.jsx'
 import OpportunityDetail from './OpportunityDetail.jsx'
 
@@ -9,13 +18,36 @@ const TABS = [
   { key: 'DISMISSED', label: 'Dismissed' },
 ]
 
-function describeActionError(error) {
+// `price` is the generated product's own current price (already known from
+// `detail.generatedProduct` at the call site) — only ever relevant for the
+// approve action, passed through so PRICE_VIOLATES_DEMAND_POLICY can name
+// the exact number that was rejected via the shared describePriceViolation
+// (same wording ProductList.jsx's row-level Approve uses — never a second,
+// drifting copy).
+function describeActionError(error, price) {
   if (error instanceof ApiError && error.body?.error) {
     switch (error.body.error) {
       case 'OPPORTUNITY_NOT_OPEN':
         return 'This opportunity is no longer open.'
       case 'MERCHANDISING_PROPOSAL_INVALID':
-        return "The generated proposal didn't pass validation — please try again."
+        return "The generated proposal didn't pass validation - please try again."
+      case 'INSUFFICIENT_PRODUCT_INTENT':
+        return "This opportunity has no specific product intent to act on - SmartCart can't generate a draft from it."
+      case 'PROPOSAL_EXCEEDS_DEMAND_CEILING':
+        return "The generated price was higher than what observed demand supports - please try again."
+      case 'PROPOSAL_NOT_LOWER_PRICED':
+        return "The generated price wasn't actually lower than your existing product - please try again."
+      case 'APPROVAL_REQUIREMENTS_NOT_MET':
+        return 'This product needs a price before it can be approved - set one in Catalog first.'
+      case 'INVALID_STATUS_TRANSITION':
+        return 'This product has already been reviewed.'
+      case 'PRICE_VIOLATES_DEMAND_POLICY': {
+        const details = error.body.details || []
+        if (details.length === 0) return 'This price does not match observed demand.'
+        return details.map((detail) => describePriceViolation(detail, price)).join(' ')
+      }
+      case 'DEMAND_POLICY_UNVERIFIABLE':
+        return "SmartCart can't verify this product's original demand evidence anymore, so it can't be approved as-is."
       default:
         return 'Something went wrong. Please try again.'
     }
@@ -35,7 +67,7 @@ function OpportunityWorkspace({ merchant }) {
   const [detail, setDetail] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState(null)
-  const [actionState, setActionState] = useState('idle') // idle | generating | dismissing
+  const [actionState, setActionState] = useState('idle') // idle | generating | dismissing | approving | rejecting
   const [actionError, setActionError] = useState(null)
 
   const fetchOpportunities = useCallback(
@@ -108,6 +140,36 @@ function OpportunityWorkspace({ merchant }) {
     }
   }
 
+  async function handleApproveProduct() {
+    if (!detail?.generatedProduct?.id) return
+    setActionState('approving')
+    setActionError(null)
+    try {
+      await approveProduct(merchant.id, detail.generatedProduct.id)
+      const refreshed = await getOpportunity(merchant.id, selectedId)
+      setDetail(refreshed)
+    } catch (error) {
+      setActionError(describeActionError(error, detail.generatedProduct.price))
+    } finally {
+      setActionState('idle')
+    }
+  }
+
+  async function handleRejectProduct() {
+    if (!detail?.generatedProduct?.id) return
+    setActionState('rejecting')
+    setActionError(null)
+    try {
+      await rejectProduct(merchant.id, detail.generatedProduct.id)
+      const refreshed = await getOpportunity(merchant.id, selectedId)
+      setDetail(refreshed)
+    } catch (error) {
+      setActionError(describeActionError(error))
+    } finally {
+      setActionState('idle')
+    }
+  }
+
   if (selectedId) {
     return (
       <OpportunityDetail
@@ -118,6 +180,8 @@ function OpportunityWorkspace({ merchant }) {
         onRetry={() => openOpportunity(selectedId)}
         onDismiss={handleDismiss}
         onGenerateDraft={handleGenerateDraft}
+        onApproveProduct={handleApproveProduct}
+        onRejectProduct={handleRejectProduct}
         actionState={actionState}
         actionError={actionError}
       />

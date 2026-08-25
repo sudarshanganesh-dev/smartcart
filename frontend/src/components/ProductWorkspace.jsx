@@ -93,7 +93,7 @@ function ProductWorkspace({ merchant, onBack }) {
         <button type="button" className="link-button" onClick={onBack}>
           ← Back
         </button>
-        <h2>{merchant.name} — Products</h2>
+        <h2>{merchant.name} - Products</h2>
         <button
           type="button"
           className="btn-primary"

@@ -50,7 +50,7 @@ function describeError(error) {
       case 'INVALID_MESSAGE':
         return 'Please type a message first.'
       case 'MESSAGE_TOO_LONG':
-        return 'That message is too long — please shorten it.'
+        return 'That message is too long - please shorten it.'
       default:
         return 'Something went wrong. Please try again.'
     }
@@ -83,7 +83,7 @@ function describeCheckoutError(error) {
   switch (code) {
     case 'MISSING_CREDENTIALS':
     case 'NOT_TEST_MODE':
-      return "Payment isn't configured yet — please try again later."
+      return "Payment isn't configured yet - please try again later."
     case 'CART_EMPTY':
       return 'Your cart is empty.'
     case 'CART_NOT_READY':
@@ -93,7 +93,7 @@ function describeCheckoutError(error) {
     case 'CART_CHANGED':
       return 'Your cart changed. Please review it before paying.'
     case 'RAZORPAY_API_ERROR':
-      return 'The payment provider is temporarily unavailable — please try again.'
+      return 'The payment provider is temporarily unavailable - please try again.'
     default:
       return 'Could not start payment. Please try again.'
   }
@@ -254,7 +254,7 @@ function CustomerChat() {
     try {
       await loadRazorpayCheckoutScript()
     } catch {
-      setPayment({ status: 'error', message: "Couldn't load the payment provider — please check your connection and try again." })
+      setPayment({ status: 'error', message: "Couldn't load the payment provider - please check your connection and try again." })
       return
     }
 

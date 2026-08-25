@@ -190,7 +190,7 @@ export async function importNormalizedRows(items, { merchantId, sourceType }) {
         ...meta,
         outcome: "FAILED",
         name: data.name,
-        errors: [`duplicate SKU "${data.sku}" — already used by ${seenSkus.get(data.sku)}`],
+        errors: [`duplicate SKU "${data.sku}" - already used by ${seenSkus.get(data.sku)}`],
       });
       continue;
     }

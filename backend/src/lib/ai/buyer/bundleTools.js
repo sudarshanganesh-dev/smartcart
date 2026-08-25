@@ -145,14 +145,14 @@ export async function resolveBundleProposal(args, context) {
     if (products.some((p) => p.merchant.id !== allowedMerchantId)) {
       return {
         error: "MIXED_MERCHANT_ITEMS",
-        message: "Your cart already has items from one merchant — a plan can only combine products from that same merchant.",
+        message: "Your cart already has items from one merchant - a plan can only combine products from that same merchant.",
       };
     }
   } else if (merchantIds.length > 1) {
     const [dominantMerchantId] = [...merchantCounts.entries()].sort((a, b) => b[1] - a[1])[0];
     return {
       error: "MIXED_MERCHANT_ITEMS",
-      message: "These products are from more than one merchant — a plan can only combine products from a single merchant.",
+      message: "These products are from more than one merchant - a plan can only combine products from a single merchant.",
       dominantMerchantId,
     };
   } else {

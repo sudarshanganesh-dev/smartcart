@@ -35,11 +35,23 @@ function CatalogPage() {
   }
 
   return (
-    <IngestionChoices
-      onSelectManual={() => setView('manual')}
-      onSelectUpload={() => setView('upload')}
-      onSelectCrawl={() => setView('crawl')}
-    />
+    <div className="catalog-landing">
+      <div className="catalog-landing__view-products">
+        <div>
+          <h3>Your catalog</h3>
+          <p>See and manage the products you already have.</p>
+        </div>
+        <button type="button" className="btn-primary" onClick={() => setView('manual')}>
+          View Products
+        </button>
+      </div>
+
+      <IngestionChoices
+        onSelectManual={() => setView('manual')}
+        onSelectUpload={() => setView('upload')}
+        onSelectCrawl={() => setView('crawl')}
+      />
+    </div>
   )
 }
 

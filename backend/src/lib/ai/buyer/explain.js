@@ -37,7 +37,7 @@ export function buildWhyFacts({ product, filters = {}, preferences = [], maxBudg
   const budgetLimit = maxBudget ?? filters.maxPrice ?? null;
 
   if (budgetLimit != null && product.price != null && isWithinBudget(product.price, budgetLimit)) {
-    facts.push({ id: "budget", label: `₹${product.price} — within your ₹${Number(budgetLimit).toFixed(2)} budget` });
+    facts.push({ id: "budget", label: `₹${product.price} - within your ₹${Number(budgetLimit).toFixed(2)} budget` });
   }
   if (
     filters.category &&

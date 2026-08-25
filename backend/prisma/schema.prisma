@@ -210,6 +210,10 @@ model DemandEvent {
   // this constraint, never a substitute for it.
   @@unique([conversationId, groupKey])
   @@index([merchantId, groupKey, createdAt])
+  // Feature 2 (Growth Agent) — supports simulateHistoricalFit's scoped scan
+  // (merchant + reason family + category), separate from the groupKey-based
+  // index above since that query doesn't filter by category/reason alone.
+  @@index([merchantId, reason, category])
 }
 
 enum OpportunityStatus {
@@ -238,6 +242,21 @@ model Opportunity {
   // "N signals before this was actioned, M since" without a new lifecycle
   // state. Null until actioned.
   signalCountAtAction Int?
+
+  // Feature 2 (Growth Agent) — frozen the moment the AI drafts a product for
+  // this opportunity, BEFORE merchant approval (hence "AtProposal", not
+  // "AtAction" — the merchant hasn't acted yet at this point in the
+  // lifecycle). Answers "how much of the recorded historical demand would
+  // this exact proposed product have addressed" using only DemandEvents that
+  // existed up to this moment — never recomputed later, so it can never be
+  // inflated or deflated by demand that arrived after the proposal. Null
+  // whenever no draft has been generated yet, or the draft's price was still
+  // null at creation time (see simulateHistoricalFit). This is historical
+  // demand evidence only — never a sales prediction or revenue forecast.
+  historicalFitTotalAtProposal       Int?
+  historicalFitAddressableAtProposal Int?
+  historicalFitObservedValueAtProposal Decimal? @db.Decimal(10, 2)
+  historicalFitComputedAt            DateTime?
 
   // Plain reference, not a foreign key — same reasoning as OrderItem.productId.
   generatedProductId String?

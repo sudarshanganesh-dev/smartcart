@@ -66,8 +66,17 @@ opportunitiesRouter.post("/:opportunityId/generate-draft", generateDraftLimiter,
     if (result.error === "OPPORTUNITY_NOT_ACTIONABLE") {
       return res.status(409).json({ error: "OPPORTUNITY_NOT_ACTIONABLE" });
     }
+    if (result.error === "INSUFFICIENT_PRODUCT_INTENT") {
+      return res.status(409).json({ error: "INSUFFICIENT_PRODUCT_INTENT" });
+    }
     if (result.error === "MERCHANDISING_PROPOSAL_INVALID") {
       return res.status(502).json({ error: "MERCHANDISING_PROPOSAL_INVALID", details: result.details });
+    }
+    if (result.error === "PROPOSAL_EXCEEDS_DEMAND_CEILING") {
+      return res.status(502).json({ error: "PROPOSAL_EXCEEDS_DEMAND_CEILING", details: result.details });
+    }
+    if (result.error === "PROPOSAL_NOT_LOWER_PRICED") {
+      return res.status(502).json({ error: "PROPOSAL_NOT_LOWER_PRICED", details: result.details });
     }
     res.status(201).json(result.product);
   } catch (error) {

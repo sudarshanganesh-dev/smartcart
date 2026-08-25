@@ -441,19 +441,19 @@ function logTurn(event) {
 function describeProviderError(code) {
   switch (code) {
     case "PROVIDER_UNAVAILABLE":
-      return "The shopping assistant isn't available right now — please try again later.";
+      return "The shopping assistant isn't available right now - please try again later.";
     case "TIMEOUT":
-      return "That took a bit too long — please try again.";
+      return "That took a bit too long - please try again.";
     case "QUOTA_EXCEEDED":
-      return "The shopping assistant is temporarily busy — please try again in a moment.";
+      return "The shopping assistant is temporarily busy - please try again in a moment.";
     case "INVALID_API_KEY":
-      return "The shopping assistant is misconfigured right now — please try again later.";
+      return "The shopping assistant is misconfigured right now - please try again later.";
     case "MODEL_UNAVAILABLE":
-      return "The shopping assistant is temporarily unavailable — please try again later.";
+      return "The shopping assistant is temporarily unavailable - please try again later.";
     case "NETWORK_ERROR":
-      return "We couldn't reach the shopping assistant — please try again.";
+      return "We couldn't reach the shopping assistant - please try again.";
     default:
-      return "Something went wrong on our side — please try again.";
+      return "Something went wrong on our side - please try again.";
   }
 }
 
@@ -533,7 +533,7 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
       // model should always call respond_to_customer, but a provider can
       // occasionally return plain (even empty) text instead.
       const content = typeof result.content === "string" ? result.content.trim() : "";
-      finalText = content !== "" ? content : "Sorry, I didn't quite catch that — could you rephrase?";
+      finalText = content !== "" ? content : "Sorry, I didn't quite catch that - could you rephrase?";
       const outcome = resolveTurnOutcome({
         searchOutcome,
         showMoreOutcome,
@@ -855,7 +855,7 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
 
     if (respondArgs) {
       const message = typeof respondArgs.message === "string" ? respondArgs.message.trim() : "";
-      finalText = message !== "" ? message : "Sorry, I didn't quite catch that — could you rephrase?";
+      finalText = message !== "" ? message : "Sorry, I didn't quite catch that - could you rephrase?";
       requestedProductIds = Array.isArray(respondArgs.productIds) ? respondArgs.productIds : null;
       const outcome = resolveTurnOutcome({
         searchOutcome,
@@ -880,7 +880,7 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
   truncateHistory(state);
 
   if (finalText === null) {
-    finalText = "I'm having trouble completing that right now — could you try rephrasing?";
+    finalText = "I'm having trouble completing that right now - could you try rephrasing?";
     finalFollowUp = null;
     lastProducts = [];
     bundleToShow = null;

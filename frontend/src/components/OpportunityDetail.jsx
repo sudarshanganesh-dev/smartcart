@@ -99,45 +99,92 @@ function ReadinessFlags({ flags }) {
   )
 }
 
-// A fresh AI-generated draft is created with price: null by design (see
-// generateDraftForOpportunity's Decision 5 — Gemini's response schema has no
-// price field at all, so the merchant always sets the selling price
-// themselves). Lets that happen right here instead of forcing a trip to
-// Catalog. The typed price is sent through the EXACT SAME PATCH endpoint
-// Catalog's own edit form uses, which re-runs validateGeneratedProductPrice
-// server-side — this form never validates the price itself, it only submits
-// what the merchant typed.
-function SetPriceForm({ ceiling, onSetPrice, actionState, actionError }) {
-  const [price, setPrice] = useState('')
-  const saving = actionState === 'pricing'
+const AVAILABILITY_OPTIONS = [
+  { value: 'UNKNOWN', label: 'Unknown' },
+  { value: 'IN_STOCK', label: 'In stock' },
+  { value: 'OUT_OF_STOCK', label: 'Out of stock' },
+]
+
+// A fresh AI-generated draft is created with price: null, availability:
+// UNKNOWN, stockQuantity: null by design (generateDraftForOpportunity's
+// Decision 5/6 — Gemini's response schema has no price field, and stock is
+// never inferred from anything) — the merchant always sets all three
+// themselves. Lets that happen right here instead of a Catalog detour.
+// Submitted together through the EXACT SAME PATCH endpoint Catalog's own
+// edit form uses, which re-runs validateGeneratedProductPrice server-side —
+// this form never validates anything itself, it only submits what the
+// merchant chose. Availability starts at the product's OWN current value
+// (UNKNOWN for a fresh draft) — never silently defaulted to IN_STOCK; the
+// merchant must actively choose it.
+function ProductSetupForm({ product, ceiling, onSave, actionState }) {
+  const [price, setPrice] = useState(product.price != null ? String(product.price) : '')
+  const [availability, setAvailability] = useState(product.availability)
+  const [stockQuantity, setStockQuantity] = useState(product.stockQuantity != null ? String(product.stockQuantity) : '')
+  const saving = actionState === 'savingSetup'
 
   function handleSubmit(event) {
     event.preventDefault()
-    const parsed = Number(price)
-    if (price.trim() === '' || Number.isNaN(parsed) || parsed < 0) return
-    onSetPrice(parsed)
+    const parsedPrice = Number(price)
+    if (price.trim() === '' || Number.isNaN(parsedPrice) || parsedPrice < 0) return
+
+    const payload = { price: parsedPrice, availability }
+    // IN_STOCK requires a stated quantity of at least 1 here (a form-level
+    // nudge, not a new backend rule - getApprovalRequirementFailures never
+    // required this) - IN_STOCK + 0 would contradict the customer-side
+    // purchasability rule (ProductCard/add-to-cart treat IN_STOCK as
+    // purchasable only when stockQuantity is null or >= 1). OUT_OF_STOCK/
+    // UNKNOWN pass through exactly what the merchant typed, or null if left
+    // blank - never silently rewritten.
+    if (availability === 'IN_STOCK') {
+      const parsedStock = Number(stockQuantity)
+      if (stockQuantity.trim() === '' || !Number.isInteger(parsedStock) || parsedStock < 1) return
+      payload.stockQuantity = parsedStock
+    } else {
+      payload.stockQuantity = stockQuantity.trim() === '' ? null : Number(stockQuantity)
+    }
+
+    onSave(payload)
   }
 
   return (
     <div className="opportunity-detail__section">
-      <h4 className="opportunity-detail__section-title">Set Selling Price</h4>
+      <h4 className="opportunity-detail__section-title">Product Setup</h4>
       {ceiling != null && <p className="field-hint">Demand-supported ceiling: {formatMoney(ceiling)}</p>}
       <form className="product-form" onSubmit={handleSubmit}>
+        <div className="product-form__row">
+          <label>
+            Selling price
+            <input type="number" step="0.01" min="0" value={price} onChange={(e) => setPrice(e.target.value)} disabled={saving} />
+          </label>
+          <label>
+            Availability
+            <select value={availability} onChange={(e) => setAvailability(e.target.value)} disabled={saving}>
+              {AVAILABILITY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <label>
-          Selling price
-          <input type="number" step="0.01" min="0" value={price} onChange={(e) => setPrice(e.target.value)} disabled={saving} />
+          Stock quantity{availability === 'IN_STOCK' ? ' *' : ''}
+          <input
+            type="number"
+            step="1"
+            min={availability === 'IN_STOCK' ? 1 : 0}
+            value={stockQuantity}
+            onChange={(e) => setStockQuantity(e.target.value)}
+            disabled={saving}
+            required={availability === 'IN_STOCK'}
+          />
         </label>
         <div className="product-form__actions">
           <button type="submit" className="btn-primary" disabled={saving || price.trim() === ''}>
-            {saving ? 'Saving…' : 'Save price'}
+            {saving ? 'Saving…' : 'Save product setup'}
           </button>
         </div>
       </form>
-      {actionError && (
-        <div className="error-banner">
-          <p>{actionError}</p>
-        </div>
-      )}
     </div>
   )
 }
@@ -277,7 +324,7 @@ function OpportunityDetail({
   onGenerateDraft,
   onApproveProduct,
   onRejectProduct,
-  onSetPrice,
+  onSaveProductSetup,
   actionState,
   actionError,
 }) {
@@ -406,22 +453,24 @@ function OpportunityDetail({
             </div>
           )}
 
-          {/* A fresh draft always has price: null (see SetPriceForm) — the
-              merchant sets it here, then Approve/Reject appear once there's
-              an actual price to review. Setting the price is never combined
-              with approval: this is a separate, explicit submit, and Approve
-              remains its own separate click. */}
-          {isDraftPending && generatedProduct.price === null && (
-            <SetPriceForm
-              ceiling={opportunity.demandSupportedCeiling?.ceiling ?? null}
-              onSetPrice={onSetPrice}
-              actionState={actionState}
-              actionError={actionError}
-            />
-          )}
-
-          {isDraftPending && generatedProduct.price !== null && (
+          {/* Product Setup and Approve/Reject are always shown together for
+              a pending draft, exactly like Catalog's ProductList already
+              does for every other pending product - the backend (price
+              required) is the real gate, not this page hiding the button.
+              Setting up the product is never combined with approval: this
+              is a separate, explicit submit, and Approve remains its own
+              separate click. One shared error banner below covers whichever
+              action most recently failed, so the same error is never shown
+              twice. */}
+          {isDraftPending && (
             <>
+              <ProductSetupForm
+                product={generatedProduct}
+                ceiling={opportunity.demandSupportedCeiling?.ceiling ?? null}
+                onSave={onSaveProductSetup}
+                actionState={actionState}
+              />
+
               <div className="product-form__actions">
                 <button
                   type="button"
@@ -435,11 +484,6 @@ function OpportunityDetail({
                   {actionState === 'rejecting' ? 'Rejecting…' : 'Reject'}
                 </button>
               </div>
-              {/* Rendered immediately below the buttons that can produce it —
-                  the merchant must see why Approve/Reject failed without
-                  scrolling past Growth Feed/Revenue Impact. The lower-page
-                  error banner below is deliberately gated to !isDraftPending
-                  so the same error is never shown twice. */}
               {actionError && (
                 <div className="error-banner">
                   <p>{actionError}</p>

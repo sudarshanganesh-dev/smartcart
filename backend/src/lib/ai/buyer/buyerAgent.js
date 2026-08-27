@@ -401,6 +401,31 @@ export async function addBundleToCartForConversation(conversationId) {
   return { ok: true, cart: toCartDTO(state.cart) };
 }
 
+// Deterministic, non-Gemini action behind the customer product card's direct
+// "Add to cart" button (Feature 3 demo-hardening) — same reasoning as
+// addBundleToCartForConversation above: a real commerce mutation should
+// never depend on what Gemini says. Reuses the EXACT SAME cart executor
+// (CART_TOOL_EXECUTORS.add_to_cart) and grounding rule
+// (isGroundedForMutation, via everShownProductIds) the conversational
+// add_to_cart path already goes through — never a second, parallel
+// validation. Always quantity 1, matching the conversational path's own
+// default and the button's own single-click affordance.
+export async function addProductToCartForConversation(conversationId, productId) {
+  const state = conversations.get(conversationId);
+  if (!state) return { error: "UNKNOWN_CONVERSATION" };
+
+  const result = await CART_TOOL_EXECUTORS.add_to_cart(
+    { productId, quantity: 1 },
+    { cart: state.cart, everShownProductIds: state.everShownProductIds }
+  );
+  if (result.ok) {
+    // Same rule every other cart-mutating tool follows: a real mutation
+    // invalidates prior checkout readiness.
+    state.checkoutReady = false;
+  }
+  return result;
+}
+
 // A naive slice(-N) can cut in the middle of a turn — between a model
 // functionCall message and its paired tool functionResponse message — which
 // Gemini's API rejects outright ("function call turn must come immediately

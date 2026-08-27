@@ -2,7 +2,7 @@ import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkBreaks from 'remark-breaks'
 import { ShoppingBag, CheckCircle2 } from 'lucide-react'
-import { sendChatMessage, createCheckoutOrder, verifyPayment, addBundleToCart, ApiError } from '../lib/api.js'
+import { sendChatMessage, createCheckoutOrder, verifyPayment, addBundleToCart, addProductToCart, ApiError } from '../lib/api.js'
 import { formatMoney } from '../lib/formatMoney.js'
 import PaymentSuccessCard from './PaymentSuccessCard.jsx'
 import BundleCard from './BundleCard.jsx'
@@ -78,6 +78,15 @@ function loadRazorpayCheckoutScript() {
   return razorpayScriptPromise
 }
 
+// The cart executors (cartTools.js) already produce customer-facing-quality
+// messages for every error case ("This product is currently out of stock.",
+// "The available quantity isn't confirmed..."). Reusing that message
+// directly avoids a second, drifting copy of the same error text.
+function describeAddToCartError(error) {
+  if (error instanceof ApiError && error.body?.message) return error.body.message
+  return 'Could not add this to your cart. Please try again.'
+}
+
 function describeCheckoutError(error) {
   const code = error instanceof ApiError ? error.body?.error : null
   switch (code) {
@@ -99,11 +108,22 @@ function describeCheckoutError(error) {
   }
 }
 
-function ProductCard({ product }) {
+// `cartState` is this one product's own add-to-cart attempt state
+// ({status: 'adding'|'added'|'error', message?}), keyed by productId in the
+// parent so every card showing the same product agrees on it. The button is
+// a direct, visible commerce action alongside conversational ordering — it
+// never replaces "yes" -> Gemini add_to_cart, which keeps working unchanged.
+function ProductCard({ product, onAddToCart, cartState }) {
   const hasQty = product.stockQuantity !== null && product.stockQuantity !== undefined
   const inStock = product.availability === 'IN_STOCK'
+  // Same purchasability rule already used elsewhere in this codebase
+  // (opportunityLoop.js/OpportunityDetail.jsx's isProductPurchasable) — a
+  // product can be IN_STOCK with an unconfirmed exact quantity (stockQuantity
+  // null), which is still fine for a single-unit add.
+  const purchasable = inStock && (product.stockQuantity === null || product.stockQuantity >= 1)
   const availabilityLine = inStock && hasQty ? `In stock · ${product.stockQuantity} available` : humanizeAvailability(product.availability)
   const initial = product.name ? product.name.charAt(0).toUpperCase() : '?'
+  const status = cartState?.status
 
   return (
     <div className="chat-product-card">
@@ -119,6 +139,21 @@ function ProductCard({ product }) {
         </p>
         {product.merchant?.name && <p className="chat-product-card__merchant">Sold by {product.merchant.name}</p>}
         <WhyThis facts={product.why} />
+        {/* UNKNOWN/OUT_OF_STOCK never get a misleading active button - the
+            availability line above is already the honest reason, so no
+            button is shown at all rather than a disabled one with no
+            explanation. */}
+        {purchasable && onAddToCart && (
+          <button
+            type="button"
+            className="chat-product-card__add-button"
+            onClick={() => onAddToCart(product.id)}
+            disabled={status === 'adding' || status === 'added'}
+          >
+            {status === 'adding' ? 'Adding…' : status === 'added' ? 'Added ✓' : 'Add to cart'}
+          </button>
+        )}
+        {status === 'error' && cartState?.message && <p className="chat-product-card__add-error">{cartState.message}</p>}
       </div>
     </div>
   )
@@ -171,6 +206,10 @@ function CustomerChat() {
   // this directly, and it is never inferred from message text.
   const [checkoutReady, setCheckoutReady] = useState(false)
   const [payment, setPayment] = useState({ status: 'idle' }) // idle | processing | awaiting-payment | verifying | verified | error
+  // Direct "Add to cart" button state, keyed by productId - {status, message}.
+  // Independent of the conversational cart flow above; both write to the
+  // SAME backend cart, just through two different trusted entry points.
+  const [cartActions, setCartActions] = useState({})
 
   // Resets only this component's own local conversation state — never
   // touches the database or any merchant-side state (Catalog/Orders/
@@ -186,6 +225,7 @@ function CustomerChat() {
     setError(null)
     setCheckoutReady(false)
     setPayment({ status: 'idle' })
+    setCartActions({})
   }
 
   async function handleSubmit(event) {
@@ -227,6 +267,28 @@ function CustomerChat() {
     setCart(result.cart)
     setCheckoutReady(false)
     return result
+  }
+
+  // Deterministic action behind a product card's direct "Add to cart"
+  // button - goes through the SAME trusted backend cart path (add_to_cart's
+  // own executor/grounding rule) the conversational "yes" flow uses, just
+  // via a dedicated endpoint instead of a Gemini tool call. Guards against a
+  // double click while a request for this exact product is already in
+  // flight or already succeeded.
+  async function handleAddToCart(productId) {
+    if (!conversationId) return
+    const current = cartActions[productId]?.status
+    if (current === 'adding' || current === 'added') return
+
+    setCartActions((prev) => ({ ...prev, [productId]: { status: 'adding' } }))
+    try {
+      const result = await addProductToCart(conversationId, productId)
+      setCart(result.cart)
+      setCheckoutReady(false)
+      setCartActions((prev) => ({ ...prev, [productId]: { status: 'added' } }))
+    } catch (err) {
+      setCartActions((prev) => ({ ...prev, [productId]: { status: 'error', message: describeAddToCartError(err) } }))
+    }
   }
 
   // Deterministic, button-driven payment flow — never routed through Gemini.
@@ -343,7 +405,12 @@ function CustomerChat() {
                 {entry.products && entry.products.length > 0 && (
                   <div className="chat-product-list">
                     {entry.products.map((product) => (
-                      <ProductCard key={product.id} product={product} />
+                      <ProductCard
+                        key={product.id}
+                        product={product}
+                        onAddToCart={handleAddToCart}
+                        cartState={cartActions[product.id]}
+                      />
                     ))}
                   </div>
                 )}

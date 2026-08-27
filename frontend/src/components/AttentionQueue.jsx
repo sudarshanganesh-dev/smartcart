@@ -35,7 +35,7 @@ function EvidenceList({ item }) {
     }
   } else if (item.type === 'AI_PRODUCT_AWAITING_APPROVAL' && item.evidence?.price != null) {
     facts.push(`Price: ${formatMoney(item.evidence.price)}`)
-  } else if (item.type === 'AI_PRODUCT_NEEDS_PRICING' && item.evidence?.demandSupportedCeiling != null) {
+  } else if (item.type === 'AI_PRODUCT_NEEDS_SETUP' && item.evidence?.demandSupportedCeiling != null) {
     facts.push(`Demand-supported ceiling: ${formatMoney(item.evidence.demandSupportedCeiling)}`)
   } else if (item.type === 'AI_PRODUCT_MISSING_FIELDS' && item.evidence?.missing) {
     facts.push(item.evidence.missing.join(', '))

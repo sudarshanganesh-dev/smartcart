@@ -2167,6 +2167,33 @@ button:disabled {
   color: var(--text);
 }
 
+.chat-product-card__add-button {
+  margin-top: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.chat-product-card__add-button:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.chat-product-card__add-button:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.chat-product-card__add-error {
+  font-size: 11px;
+  color: var(--danger);
+  margin-top: 4px;
+}
+
 /* ==========================================================================
    Why this? / Why these? — deterministic, verified-facts-only explanations
    ========================================================================== */

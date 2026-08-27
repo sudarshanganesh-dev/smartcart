@@ -87,21 +87,24 @@ async function buildAttentionQueue({ merchantId, openList }) {
       const missing = getApprovalRequirementFailures(product);
 
       if (missing.length === 1 && missing[0] === "price") {
-        // Structurally valid draft, just needs its merchant-owned price.
-        // Ceiling evidence reuses getOpportunityForMerchant's own
-        // demandSupportedCeiling — the SAME trusted computation
-        // validateGeneratedProductPrice itself checks against — never a
-        // second, parallel calculation.
+        // Structurally valid draft — price is the only backend-REQUIRED
+        // field (getApprovalRequirementFailures never requires availability/
+        // stock), but the Opportunity Detail page now offers price +
+        // availability + stock together as one "Product Setup" step, so the
+        // copy here reflects that instead of just price. Ceiling evidence
+        // reuses getOpportunityForMerchant's own demandSupportedCeiling —
+        // the SAME trusted computation validateGeneratedProductPrice itself
+        // checks against — never a second, parallel calculation.
         let demandSupportedCeiling = null;
         if (product.originOpportunityId) {
           const originOpportunity = await getOpportunityForMerchant({ merchantId, opportunityId: product.originOpportunityId });
           demandSupportedCeiling = originOpportunity?.demandSupportedCeiling?.ceiling ?? null;
         }
         items.push({
-          type: "AI_PRODUCT_NEEDS_PRICING",
+          type: "AI_PRODUCT_NEEDS_SETUP",
           severity: "MEDIUM",
-          title: `${product.name} needs a selling price`,
-          explanation: "SmartCart created this product from observed buyer demand. Set a price before it can be reviewed.",
+          title: `${product.name} needs product setup`,
+          explanation: "SmartCart created this from observed buyer demand. Confirm price and availability before approval.",
           evidence: { originOpportunityId: product.originOpportunityId, demandSupportedCeiling },
           actionLabel: "Review opportunity",
           actionTarget: { type: "OPPORTUNITY", id: product.originOpportunityId },

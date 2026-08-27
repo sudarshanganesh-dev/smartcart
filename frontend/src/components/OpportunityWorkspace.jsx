@@ -76,7 +76,7 @@ function OpportunityWorkspace({ merchant }) {
   const [detail, setDetail] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState(null)
-  const [actionState, setActionState] = useState('idle') // idle | generating | dismissing | approving | rejecting | pricing
+  const [actionState, setActionState] = useState('idle') // idle | generating | dismissing | approving | rejecting | savingSetup
   const [actionError, setActionError] = useState(null)
 
   const fetchOpportunities = useCallback(
@@ -161,21 +161,22 @@ function OpportunityWorkspace({ merchant }) {
   }
 
   // Feature 3 demo-hardening fix — lets the merchant set a fresh AI draft's
-  // selling price right here instead of a separate trip to Catalog. Reuses
-  // the EXACT SAME PATCH endpoint Catalog's own edit form calls (updateProduct
-  // -> PATCH /products/:id), which re-runs validateGeneratedProductPrice
-  // server-side exactly as it always has — this handler adds no new price
-  // logic of its own, it only submits what the merchant typed and refetches.
-  async function handleSetPrice(price) {
+  // price, availability, and stock quantity right here instead of a
+  // separate trip to Catalog. Reuses the EXACT SAME PATCH endpoint Catalog's
+  // own edit form calls (updateProduct -> PATCH /products/:id), which
+  // re-runs validateGeneratedProductPrice server-side exactly as it always
+  // has — this handler adds no new validation of its own, it only submits
+  // what the merchant chose and refetches.
+  async function handleSaveProductSetup(payload) {
     if (!detail?.generatedProduct?.id) return
-    setActionState('pricing')
+    setActionState('savingSetup')
     setActionError(null)
     try {
-      await updateProduct(merchant.id, detail.generatedProduct.id, { price })
+      await updateProduct(merchant.id, detail.generatedProduct.id, payload)
       const refreshed = await getOpportunity(merchant.id, selectedId)
       setDetail(refreshed)
     } catch (error) {
-      setActionError(describeActionError(error, price))
+      setActionError(describeActionError(error, payload.price))
     } finally {
       setActionState('idle')
     }
@@ -223,7 +224,7 @@ function OpportunityWorkspace({ merchant }) {
         onGenerateDraft={handleGenerateDraft}
         onApproveProduct={handleApproveProduct}
         onRejectProduct={handleRejectProduct}
-        onSetPrice={handleSetPrice}
+        onSaveProductSetup={handleSaveProductSetup}
         actionState={actionState}
         actionError={actionError}
       />

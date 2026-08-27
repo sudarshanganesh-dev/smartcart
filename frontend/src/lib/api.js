@@ -128,6 +128,15 @@ export async function addBundleToCart(conversationId) {
   })
 }
 
+// Deterministic "Add to cart" action for a single product card's direct
+// button — same pattern as addBundleToCart, outside the chat/Gemini loop.
+export async function addProductToCart(conversationId, productId) {
+  return request('/api/customer/cart/add', {
+    method: 'POST',
+    body: JSON.stringify({ conversationId, productId }),
+  })
+}
+
 // Phase 5: read-only merchant order visibility. Money stays exact decimal
 // strings end to end, same reasoning as sendChatMessage — never run through
 // normalizeProduct()'s float coercion.

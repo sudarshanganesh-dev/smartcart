@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { handleMessage, addBundleToCartForConversation } from "../lib/ai/buyer/buyerAgent.js";
+import { handleMessage, addBundleToCartForConversation, addProductToCartForConversation } from "../lib/ai/buyer/buyerAgent.js";
 
 export const customerRouter = Router();
 
@@ -56,6 +56,36 @@ customerRouter.post("/bundle/add-all", async (req, res) => {
     res.json({ cart: result.cart });
   } catch (error) {
     console.error("Add plan to cart failed:", error.message);
+    res.status(500).json({ error: "INTERNAL_ERROR" });
+  }
+});
+
+// Deterministic "Add to cart" action for a single product card — a direct,
+// visible commerce action alongside conversational ordering, never a
+// replacement for it. Delegates entirely to addProductToCartForConversation,
+// which reuses the SAME cart executor/grounding rule the conversational
+// add_to_cart tool call already goes through — no parallel validation here.
+customerRouter.post("/cart/add", async (req, res) => {
+  const { conversationId, productId } = req.body || {};
+
+  if (typeof conversationId !== "string" || conversationId.trim() === "") {
+    return res.status(400).json({ error: "INVALID_CONVERSATION" });
+  }
+  if (typeof productId !== "string" || productId.trim() === "") {
+    return res.status(400).json({ error: "INVALID_ARGUMENTS" });
+  }
+
+  try {
+    const result = await addProductToCartForConversation(conversationId, productId);
+    if (result.error === "UNKNOWN_CONVERSATION") {
+      return res.status(404).json({ error: "UNKNOWN_CONVERSATION" });
+    }
+    if (result.error) {
+      return res.status(409).json({ error: result.error, message: result.message });
+    }
+    res.json({ cart: result.cart });
+  } catch (error) {
+    console.error("Add to cart failed:", error.message);
     res.status(500).json({ error: "INTERNAL_ERROR" });
   }
 });

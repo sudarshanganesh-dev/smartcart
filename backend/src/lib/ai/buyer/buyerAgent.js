@@ -482,6 +482,36 @@ function describeProviderError(code) {
   }
 }
 
+// Runtime, per-request cart context — deliberately NOT part of the
+// persistent transcript (state.messages), and never a fake assistant
+// utterance. state.cart is the single authoritative source, mutated only
+// through CART_TOOL_EXECUTORS — whether that's Gemini's own add_to_cart/
+// update_cart_item/remove_from_cart tool calls, the direct "Add to cart"
+// button (addProductToCartForConversation), or a bundle "Add all to cart"
+// action (addBundleToCartForConversation). All three paths converge on the
+// exact same state.cart object, so reading it fresh here, right before
+// every model call, means Gemini always sees the real cart regardless of
+// which of those paths changed it — with zero risk of the cart context
+// itself drifting from truth, since it's read directly, never cached or
+// duplicated. Passed via the system instruction (a genuinely per-request
+// channel — see provider.js's sendChat, which already sends `systemPrompt`
+// fresh on every call), never written into conversation history.
+function buildCartContext(cart) {
+  const dto = toCartDTO(cart);
+  if (dto.items.length === 0) {
+    return "Current cart state (authoritative — reflects the real cart right now, regardless of how it changed): empty.";
+  }
+  const lines = dto.items.map(
+    (item) => `- ${item.name} (productId: ${item.productId}): quantity ${item.quantity}, unit price ${item.unitPrice}, line total ${item.lineTotal}`
+  );
+  return [
+    'Current cart state (authoritative — reflects the real cart right now, regardless of how it changed, including a direct "Add to cart" button the customer may have already used outside this chat):',
+    ...lines,
+    `Subtotal: ${dto.currency || ""} ${dto.subtotal}`.trim(),
+    "If a product listed above is already in the cart, do not call add_to_cart for it again merely because the customer says \"yes\", \"order it\", \"I'll take it\", or similar general agreement — treat that as wanting to proceed toward checkout instead. Only increase a quantity when the customer explicitly asks for another unit or a specific larger quantity.",
+  ].join("\n");
+}
+
 // `sendChatFn` defaults to the real provider and is only ever overridden by
 // tests (a fake provider standing in for Gemini) — production code always
 // uses the default.
@@ -540,10 +570,15 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
       emptySearchCount >= MAX_EMPTY_SEARCH_ATTEMPTS || bundleAttemptCount >= MAX_BUNDLE_ATTEMPTS
         ? [RESPOND_TOOL]
         : [...TOOL_DEFINITIONS, RESPOND_TOOL, SHOW_MORE_TOOL, ...CART_TOOL_DEFINITIONS, REQUEST_CHECKOUT_TOOL, PROPOSE_BUNDLE_TOOL];
+    // Rebuilt fresh every iteration (not once per turn) so a cart mutation
+    // Gemini itself makes mid-turn (e.g. an add_to_cart call in an earlier
+    // iteration) is also reflected before the next call — on top of that
+    // already being visible via the real tool-response message, this keeps
+    // the context block itself never stale within a turn either.
     const result = await sendChatFn({
       messages: state.messages,
       tools,
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt: `${SYSTEM_PROMPT}\n\n${buildCartContext(state.cart)}`,
     });
 
     if (result.type === "error") {

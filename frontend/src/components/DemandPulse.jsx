@@ -6,13 +6,17 @@ import { REASON_LABELS, humanizeBudgetBand } from '../lib/opportunityCopy.js'
 // already-audited Opportunity (see dashboardService.js's topDemandSignals),
 // the same data the Opportunities workspace shows. No counts, trends, or
 // percentages are invented here; an empty list shows an honest empty state.
-function DemandPulse({ signals }) {
+// `emptyMessage` lets a caller that already knows WHY the list is empty
+// (e.g. Demand Intelligence, which has the total/actioned counts) say
+// something more specific than the generic default - never required, so
+// every other/future caller keeps working unchanged.
+function DemandPulse({ signals, emptyMessage = 'No AI buyer demand yet - it will show up here as customers shop.' }) {
   return (
     <div className="demand-pulse">
       <h3 className="demand-pulse__title">AI buyers are looking for</h3>
 
       {signals.length === 0 ? (
-        <p className="empty-state">No AI buyer demand yet - it will show up here as customers shop.</p>
+        <p className="empty-state">{emptyMessage}</p>
       ) : (
         <ul className="demand-pulse__list">
           {signals.map((signal) => (

@@ -2692,3 +2692,270 @@ button:disabled {
     max-width: 92%;
   }
 }
+
+/* ==========================================================================
+   Merchant AI Commerce Control Center — SmartCart Brief + Needs Your
+   Attention. Level 3 hero treatment for the Brief (same tier as
+   .ai-growth-card, since this is the page's signature "AI is speaking to
+   you" surface); Needs Your Attention uses a restrained left-border accent
+   per severity rather than full-panel color, so a HIGH item reads as
+   important without turning the page into an alert screen.
+   ========================================================================== */
+
+.control-center__header {
+  margin-bottom: 4px;
+}
+
+.control-center__section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.control-center__section-intro h2 {
+  margin-bottom: 2px;
+}
+
+/* Catalog Health - groups the 7 real metrics into two labeled rows (status,
+   availability) instead of one flat row of 7 identical-looking cards, so
+   the merchant can read "catalog condition" in two glances instead of one
+   undifferentiated wall. h4's existing global style (small, uppercase,
+   muted) already reads as a section label, so it's reused as-is here. */
+.catalog-health__group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.smartcart-brief {
+  padding: 26px 30px;
+  background: linear-gradient(135deg, var(--hero-gradient-soft) 0%, var(--surface) 60%), var(--surface);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-3);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.smartcart-brief__kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0;
+}
+
+.smartcart-brief__text {
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--text-h);
+  max-width: 720px;
+  margin: 0;
+}
+
+.smartcart-brief__metrics {
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+  border-top: 1px solid var(--accent-border);
+}
+
+.smartcart-brief__metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.smartcart-brief__metric-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent-ink);
+}
+
+.smartcart-brief__metric-label {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.attention-queue {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.attention-item {
+  padding: 14px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.attention-item--high {
+  border-left-color: var(--danger);
+}
+
+.attention-item--medium {
+  border-left-color: var(--warning);
+}
+
+.attention-item--low {
+  border-left-color: var(--border-strong);
+}
+
+.attention-item__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.attention-item__severity {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--neutral-bg);
+  color: var(--neutral);
+  flex-shrink: 0;
+}
+
+.attention-item--high .attention-item__severity {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.attention-item--medium .attention-item__severity {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+/* Overrides the global h4 rule (12px, uppercase, letter-spaced, muted) -
+   that's the right style for a small section label, but this is an actual
+   card title and needs to read as one. */
+.attention-item__title {
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text-h);
+  margin: 0;
+}
+
+.attention-item__explanation {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.attention-item__evidence {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.attention-item__evidence li {
+  position: relative;
+  padding-left: 12px;
+}
+
+.attention-item__evidence li::before {
+  content: "\2022";
+  position: absolute;
+  left: 0;
+  color: var(--border-strong);
+}
+
+.attention-item__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-start;
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.attention-item__action:hover {
+  text-decoration: underline;
+}
+
+/* ==========================================================================
+   AI Revenue Impact — Level 2 elevation, same tier as .demand-pulse. The
+   two figures are deliberately shown side by side (never one implying the
+   other) with a thin share bar underneath — the only computed value is a
+   plain percentage of two real numbers, never a target/forecast/ROI.
+   ========================================================================== */
+
+.ai-revenue-card {
+  padding: 18px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ai-revenue-card__compare {
+  display: flex;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+.ai-revenue-card__figure {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ai-revenue-card__figure-label {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.ai-revenue-card__figure-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.ai-revenue-card__figure--ai .ai-revenue-card__figure-value {
+  color: var(--accent-ink);
+}
+
+.ai-revenue-card__bar {
+  height: 8px;
+  background: var(--neutral-bg);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.ai-revenue-card__bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+

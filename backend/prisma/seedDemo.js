@@ -172,7 +172,10 @@ async function createCatalog(tx, merchantId) {
 // DemandEvents -> automatic Opportunity -> AI-drafted VARIANT -> merchant
 // price/approval -> 1 PAID order), hand-built so it is internally
 // consistent (groupKey/Opportunity/Product/DemandEvents/Order all agree)
-// without depending on a live Gemini call.
+// without depending on a live Gemini call. This is a DIFFERENT demand
+// cluster (groupKey) from the live-demo Brownie opportunity below — one
+// Opportunity is never made to serve both the "already resolved" and
+// "reserved for the live demo" roles.
 async function createHistoricalAiSuccess(tx, merchantId) {
   const groupKey = `${merchantId}|NO_MATCH|cake|max:<=100`;
   const conversationIds = ["demo-seed-conv-cake-1", "demo-seed-conv-cake-2", "demo-seed-conv-cake-3"];
@@ -237,6 +240,54 @@ async function createHistoricalAiSuccess(tx, merchantId) {
   return product;
 }
 
+// The live-demo opportunity, deliberately left OPEN and un-actioned — 3
+// real NO_MATCH DemandEvents for "brownie under ₹200" (same groupKey/facts
+// the app's own automatic threshold logic would produce for 3 real
+// searches), then a real Opportunity row at the resulting threshold, and
+// nothing more. No generated product, no order, no actionedAt, no
+// signalCountAtAction — intentionally left for the live demo to action
+// itself via the real, unmodified generateDraftForOpportunity flow, never
+// pre-resolved by the seed. A DIFFERENT groupKey from the historical cake
+// success above, so the two never share or contend for the same
+// Opportunity row. The real catalog already has an approved "Brownie Box"
+// at ₹499 (see CATALOG above), so the detail page's live getCatalogGap
+// check honestly finds it and recommends a lower-priced version — this
+// seed does not fabricate or force that outcome, it only creates the real
+// demand facts that make the existing, unmodified logic arrive there.
+async function createBrownieOpenOpportunity(tx, merchantId) {
+  const groupKey = `${merchantId}|NO_MATCH|brownie|max:<=250`;
+  const conversationIds = ["demo-seed-conv-brownie-1", "demo-seed-conv-brownie-2", "demo-seed-conv-brownie-3"];
+  const baseTime = new Date("2026-08-23T10:00:00.000Z");
+
+  for (let i = 0; i < conversationIds.length; i++) {
+    await tx.demandEvent.create({
+      data: {
+        merchantId,
+        conversationId: conversationIds[i],
+        reason: "NO_MATCH",
+        groupKey,
+        queryText: "brownie",
+        minPrice: null,
+        maxPrice: 200,
+        budgetBand: "<=250",
+        estimatedValue: 200,
+        createdAt: new Date(baseTime.getTime() + i * 60_000),
+      },
+    });
+  }
+
+  await tx.opportunity.create({
+    data: {
+      merchantId,
+      groupKey,
+      reason: "NO_MATCH",
+      status: "OPEN",
+      firstSeenAt: baseTime,
+      lastSeenAt: new Date(baseTime.getTime() + 2 * 60_000),
+    },
+  });
+}
+
 async function createPaidOrder(tx, { merchantId, orderNumber, razorpayOrderId, razorpayPaymentId, createdAt, item }) {
   const subtotal = item.unitPrice * item.quantity;
   return tx.order.create({
@@ -283,6 +334,7 @@ async function main() {
 
       const products = await createCatalog(tx, merchant.id);
       const aiProduct = await createHistoricalAiSuccess(tx, merchant.id);
+      await createBrownieOpenOpportunity(tx, merchant.id);
 
       await createPaidOrder(tx, {
         merchantId: merchant.id,

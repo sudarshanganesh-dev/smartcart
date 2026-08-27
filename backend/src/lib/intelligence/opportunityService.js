@@ -589,18 +589,24 @@ function buildStockGapFact(representative) {
 function buildWhyExplanation({ reason, label, budgetBand, eventCount, status, demandCeiling }) {
   const people = eventCount === 1 ? "person" : "people";
   const budgetPart = humanizeBudgetBand(budgetBand);
+  // Prefer the real, evidence-derived ceiling (an exact ₹ figure backed by
+  // actual maxPrice signals) over the coarser budgetBand bucket phrase
+  // whenever it's available — the band exists only for deterministic
+  // grouping and can be wider than what buyers actually asked for (e.g. a
+  // ₹200 signal still falls in the "<=250" bucket). Falls back to the band
+  // phrase when there's no ceiling evidence at all (e.g. stock reasons, or
+  // a cluster with no known-budget signals).
+  const pricePart = demandCeiling?.ceiling != null ? ` under ₹${Number(demandCeiling.ceiling).toLocaleString("en-IN")}` : budgetPart;
 
   // No recoverable product intent — never invent a subject, and never the
-  // article that goes with an invented one ("searched for a this"). Quote
-  // the real demand-supported ceiling (an exact ₹ figure) instead of the
-  // coarser budgetBand phrase when it's available. After the eligibility
-  // fix (writeOne in demandService.js), a brand-new opportunity should
-  // rarely reach here with no label — this remains as an honest fallback
-  // for edge cases and for opportunities that predate that invariant.
+  // article that goes with an invented one ("searched for a this"). After
+  // the eligibility fix (writeOne in demandService.js), a brand-new
+  // opportunity should rarely reach here with no label — this remains as
+  // an honest fallback for edge cases and for opportunities that predate
+  // that invariant.
   if (!label && (reason === "NO_MATCH" || reason === "NO_MORE_OPTIONS")) {
-    const priceText = demandCeiling?.ceiling != null ? ` under ₹${demandCeiling.ceiling}` : budgetPart;
     const verb = reason === "NO_MATCH" ? "did not find a suitable match" : "found nothing new to show";
-    return `${eventCount} search${eventCount === 1 ? "" : "es"}${priceText} ${verb}.`;
+    return `${eventCount} search${eventCount === 1 ? "" : "es"}${pricePart} ${verb}.`;
   }
 
   const subject = label || "this";
@@ -613,11 +619,11 @@ function buildWhyExplanation({ reason, label, budgetBand, eventCount, status, de
       // also dropped here since the SmartCart Action section below already
       // states that fact — no need to repeat it under weaker evidence.
       if (status === "ACTIONED") {
-        return `${eventCount} ${people} searched for a ${subject}${budgetPart}, but SmartCart couldn't find a suitable match.`;
+        return `${eventCount} ${people} searched for a ${subject}${pricePart}, but SmartCart couldn't find a suitable match.`;
       }
-      return `${eventCount} ${people} wanted a ${subject}${budgetPart}. Your store did not have one, so AI suggested a new product.`;
+      return `${eventCount} ${people} wanted a ${subject}${pricePart}. Your store did not have one, so AI suggested a new product.`;
     case "NO_MORE_OPTIONS":
-      return `${eventCount} ${people} wanted more choices for ${subject}${budgetPart} after seeing what you already sell.`;
+      return `${eventCount} ${people} wanted more choices for ${subject}${pricePart} after seeing what you already sell.`;
     case "OUT_OF_STOCK":
       return `${eventCount} ${people} tried to buy ${subject}, but it was out of stock.`;
     case "INSUFFICIENT_STOCK":

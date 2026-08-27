@@ -24,7 +24,10 @@ function OpportunityList({ opportunities, onSelect }) {
               {opportunity.eventCount} people wanted this
             </p>
             {opportunity.potentialDemandValue && (
-              <p className="opportunity-card__value num-tabular">Possible value: up to {formatMoney(opportunity.potentialDemandValue)}</p>
+              <p className="opportunity-card__value num-tabular">
+                Potential demand value: {formatMoney(opportunity.potentialDemandValue)} total across {opportunity.eventCount} signal
+                {opportunity.eventCount === 1 ? '' : 's'}
+              </p>
             )}
             <div className="opportunity-card__footer">
               <span className="opportunity-card__score">Priority {opportunity.score}</span>

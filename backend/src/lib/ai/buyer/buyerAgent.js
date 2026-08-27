@@ -502,6 +502,14 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
   let requestedProductIds = null;
   let showMoreOutcome = null; // resolved {display, followUp}, set immediately when show_more_products is called
   let emptySearchCount = 0;
+  // Demo/correctness fix — Gemini is explicitly permitted (systemPrompt.js)
+  // to retry one empty search_products call with a broader/synonym term
+  // within the SAME turn (e.g. "brownie" -> "chocolate"). Both calls are
+  // real and both are allowed to run and to shape what the customer sees —
+  // this flag only gates DemandEvent RECORDING, never the search/retry
+  // behavior itself, so only the first (most authoritative, closest to the
+  // customer's own words) empty search of a turn is ever recorded as demand.
+  let noMatchRecordedThisTurn = false;
   let checkoutOutcome = null; // set immediately when request_checkout is called; short-circuits everything else
   let cartMutationSucceeded = false; // true if add_to_cart/update_cart_item actually succeeded this turn
   let bundleOutcome = null; // {bundle} on the most recent successful propose_bundle call this turn, else null
@@ -807,20 +815,34 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
 
         if (candidateIds.length === 0) {
           emptySearchCount += 1;
-          try {
-            await recordNoMatchDemandEvent(
-              {
-                conversationId: id,
-                merchantId: call.args?.merchantId,
-                category: call.args?.category,
-                query: call.args?.query,
-                minPrice: call.args?.minPrice,
-                maxPrice: call.args?.maxPrice,
-              },
-              state
-            );
-          } catch (error) {
-            console.error("[buyer-agent] demand recording failed:", error.message);
+          // Demo/correctness fix — Gemini's own sanctioned one-retry broadening
+          // (systemPrompt.js) can produce a SECOND empty search_products call
+          // this same turn (e.g. "brownie" -> "chocolate"), which would
+          // otherwise be recorded as an entirely separate demand cluster (a
+          // different groupKey never catches this — see demandService.js's
+          // computeGroupKey). Only the first empty search of the turn — the
+          // one closest to what the customer actually said — is ever recorded.
+          // Nothing about the search/retry itself is gated: emptySearchCount,
+          // the tool response, and the conversion-recovery alternatives below
+          // all still run exactly as before for every empty search, broadened
+          // or not.
+          if (!noMatchRecordedThisTurn) {
+            try {
+              await recordNoMatchDemandEvent(
+                {
+                  conversationId: id,
+                  merchantId: call.args?.merchantId,
+                  category: call.args?.category,
+                  query: call.args?.query,
+                  minPrice: call.args?.minPrice,
+                  maxPrice: call.args?.maxPrice,
+                },
+                state
+              );
+            } catch (error) {
+              console.error("[buyer-agent] demand recording failed:", error.message);
+            }
+            noMatchRecordedThisTurn = true;
           }
           // Phase 7: Conversion Recovery — deterministic, no Gemini call.
           // Budget (maxPrice) and merchant constraint (if any) are always

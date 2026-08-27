@@ -1245,6 +1245,15 @@ button:disabled {
   max-width: 700px;
 }
 
+/* Scoped on top of the shared .link-button (never edited directly - other
+   pages reuse it) so this one back-link gets an explicit, self-contained
+   gap regardless of any JSX text-node whitespace. */
+.opportunity-detail__back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .opportunity-detail__kicker {
   display: inline-flex;
   align-items: center;

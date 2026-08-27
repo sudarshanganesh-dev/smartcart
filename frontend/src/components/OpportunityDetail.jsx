@@ -331,9 +331,9 @@ function OpportunityDetail({
   if (loading || error || !opportunity) {
     return (
       <div className="opportunity-detail">
-        <button type="button" className="link-button" onClick={onBack}>
+        <button type="button" className="link-button opportunity-detail__back-link" onClick={onBack}>
           <ArrowLeft size={14} strokeWidth={2.25} aria-hidden="true" />
-          Back to opportunities
+          <span>Back to opportunities</span>
         </button>
         {loading && <p>Loading opportunity…</p>}
         {!loading && error && (
@@ -359,9 +359,9 @@ function OpportunityDetail({
 
   return (
     <div className="opportunity-detail">
-      <button type="button" className="link-button" onClick={onBack}>
+      <button type="button" className="link-button opportunity-detail__back-link" onClick={onBack}>
         <ArrowLeft size={14} strokeWidth={2.25} aria-hidden="true" />
-        Back to opportunities
+        <span>Back to opportunities</span>
       </button>
 
       <p className="opportunity-detail__kicker">

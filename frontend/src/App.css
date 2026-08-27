@@ -1751,6 +1751,157 @@ button:disabled {
 }
 
 /* ==========================================================================
+   Crawl Website screen — deliberately its OWN classes, not a restyle of the
+   shared .upload-catalog/.upload-file-picker/.product-workspace__header
+   rules above (those are also used by UploadCatalog.jsx/ProductWorkspace.jsx
+   and are left untouched). Only .upload-summary* / .compatibility-banner* /
+   .outcome-badge* / .product-form__actions are still reused here, for the
+   results state, exactly as before.
+   ========================================================================== */
+
+.crawl-website {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 800px;
+}
+
+.crawl-website__intro {
+  margin: 10px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.crawl-website__card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+  padding: 28px 32px;
+}
+
+.crawl-website__form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.crawl-website__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+  max-width: 460px;
+}
+
+.crawl-website__field input {
+  font: inherit;
+  font-weight: 400;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.crawl-website__field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+
+.crawl-website__submit {
+  align-self: flex-start;
+}
+
+.crawl-website__progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.crawl-website__spinner {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid var(--accent-border);
+  border-top-color: var(--accent);
+  animation: crawl-website-spin 0.7s linear infinite;
+}
+
+@keyframes crawl-website-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.crawl-website__trust-notes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.crawl-website__trust-notes li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--success-ink);
+}
+
+.crawl-website__info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.crawl-website__info h4 {
+  margin: 0;
+}
+
+.crawl-website__info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.crawl-website__info-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text-h);
+  text-align: center;
+}
+
+.crawl-website__result-headline {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.crawl-website__result-headline h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.crawl-website__result-headline p {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+}
+
+/* ==========================================================================
    Shop shell (Customer surface)
    ========================================================================== */
 

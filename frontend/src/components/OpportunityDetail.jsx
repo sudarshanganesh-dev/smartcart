@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { ArrowLeft, Sparkles, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import LoopTracker from './LoopTracker.jsx'
@@ -95,6 +96,49 @@ function ReadinessFlags({ flags }) {
         )
       })}
     </ul>
+  )
+}
+
+// A fresh AI-generated draft is created with price: null by design (see
+// generateDraftForOpportunity's Decision 5 — Gemini's response schema has no
+// price field at all, so the merchant always sets the selling price
+// themselves). Lets that happen right here instead of forcing a trip to
+// Catalog. The typed price is sent through the EXACT SAME PATCH endpoint
+// Catalog's own edit form uses, which re-runs validateGeneratedProductPrice
+// server-side — this form never validates the price itself, it only submits
+// what the merchant typed.
+function SetPriceForm({ ceiling, onSetPrice, actionState, actionError }) {
+  const [price, setPrice] = useState('')
+  const saving = actionState === 'pricing'
+
+  function handleSubmit(event) {
+    event.preventDefault()
+    const parsed = Number(price)
+    if (price.trim() === '' || Number.isNaN(parsed) || parsed < 0) return
+    onSetPrice(parsed)
+  }
+
+  return (
+    <div className="opportunity-detail__section">
+      <h4 className="opportunity-detail__section-title">Set Selling Price</h4>
+      {ceiling != null && <p className="field-hint">Demand-supported ceiling: {formatMoney(ceiling)}</p>}
+      <form className="product-form" onSubmit={handleSubmit}>
+        <label>
+          Selling price
+          <input type="number" step="0.01" min="0" value={price} onChange={(e) => setPrice(e.target.value)} disabled={saving} />
+        </label>
+        <div className="product-form__actions">
+          <button type="submit" className="btn-primary" disabled={saving || price.trim() === ''}>
+            {saving ? 'Saving…' : 'Save price'}
+          </button>
+        </div>
+      </form>
+      {actionError && (
+        <div className="error-banner">
+          <p>{actionError}</p>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -233,6 +277,7 @@ function OpportunityDetail({
   onGenerateDraft,
   onApproveProduct,
   onRejectProduct,
+  onSetPrice,
   actionState,
   actionError,
 }) {
@@ -361,7 +406,21 @@ function OpportunityDetail({
             </div>
           )}
 
-          {isDraftPending && (
+          {/* A fresh draft always has price: null (see SetPriceForm) — the
+              merchant sets it here, then Approve/Reject appear once there's
+              an actual price to review. Setting the price is never combined
+              with approval: this is a separate, explicit submit, and Approve
+              remains its own separate click. */}
+          {isDraftPending && generatedProduct.price === null && (
+            <SetPriceForm
+              ceiling={opportunity.demandSupportedCeiling?.ceiling ?? null}
+              onSetPrice={onSetPrice}
+              actionState={actionState}
+              actionError={actionError}
+            />
+          )}
+
+          {isDraftPending && generatedProduct.price !== null && (
             <>
               <div className="product-form__actions">
                 <button

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   getOpportunities,
   getOpportunity,
@@ -6,6 +7,7 @@ import {
   generateOpportunityDraft,
   approveProduct,
   rejectProduct,
+  updateProduct,
   ApiError,
 } from '../lib/api.js'
 import { describePriceViolation } from '../lib/pricePolicyMessages.js'
@@ -38,7 +40,7 @@ function describeActionError(error, price) {
       case 'PROPOSAL_NOT_LOWER_PRICED':
         return "The generated price wasn't actually lower than your existing product - please try again."
       case 'APPROVAL_REQUIREMENTS_NOT_MET':
-        return 'This product needs a price before it can be approved - set one in Catalog first.'
+        return 'This product needs a price before it can be approved - set one above.'
       case 'INVALID_STATUS_TRANSITION':
         return 'This product has already been reviewed.'
       case 'PRICE_VIOLATES_DEMAND_POLICY': {
@@ -58,6 +60,13 @@ function describeActionError(error, price) {
 // Phase 7: read-only insight + two lifecycle actions (generate-draft,
 // dismiss). No auto-publish path exists anywhere in this component.
 function OpportunityWorkspace({ merchant }) {
+  // Tiny, safe deep-link: Feature 3's Attention Queue can send the merchant
+  // straight to one specific opportunity (?id=...) instead of only the bare
+  // list — read once on mount, below, and never written back into the URL
+  // by anything else in this component.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const deepLinkId = searchParams.get('id')
+
   const [activeTab, setActiveTab] = useState('OPEN')
   const [opportunities, setOpportunities] = useState([])
   const [loading, setLoading] = useState(true)
@@ -67,7 +76,7 @@ function OpportunityWorkspace({ merchant }) {
   const [detail, setDetail] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState(null)
-  const [actionState, setActionState] = useState('idle') // idle | generating | dismissing | approving | rejecting
+  const [actionState, setActionState] = useState('idle') // idle | generating | dismissing | approving | rejecting | pricing
   const [actionError, setActionError] = useState(null)
 
   const fetchOpportunities = useCallback(
@@ -90,6 +99,16 @@ function OpportunityWorkspace({ merchant }) {
     Promise.resolve().then(() => fetchOpportunities(activeTab))
   }, [activeTab, fetchOpportunities])
 
+  // Runs once, only when the page was opened with ?id= — never re-triggers
+  // on a later tab change, and never fights with a manual list->detail
+  // selection (selectedId is only ever set here or by openOpportunity below).
+  useEffect(() => {
+    if (deepLinkId) {
+      openOpportunity(deepLinkId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   async function openOpportunity(id) {
     setSelectedId(id)
     setActionError(null)
@@ -110,6 +129,7 @@ function OpportunityWorkspace({ merchant }) {
     setDetail(null)
     setDetailError(null)
     setActionError(null)
+    if (deepLinkId) setSearchParams({})
     Promise.resolve().then(() => fetchOpportunities(activeTab))
   }
 
@@ -135,6 +155,27 @@ function OpportunityWorkspace({ merchant }) {
       setDetail(refreshed)
     } catch (error) {
       setActionError(describeActionError(error))
+    } finally {
+      setActionState('idle')
+    }
+  }
+
+  // Feature 3 demo-hardening fix — lets the merchant set a fresh AI draft's
+  // selling price right here instead of a separate trip to Catalog. Reuses
+  // the EXACT SAME PATCH endpoint Catalog's own edit form calls (updateProduct
+  // -> PATCH /products/:id), which re-runs validateGeneratedProductPrice
+  // server-side exactly as it always has — this handler adds no new price
+  // logic of its own, it only submits what the merchant typed and refetches.
+  async function handleSetPrice(price) {
+    if (!detail?.generatedProduct?.id) return
+    setActionState('pricing')
+    setActionError(null)
+    try {
+      await updateProduct(merchant.id, detail.generatedProduct.id, { price })
+      const refreshed = await getOpportunity(merchant.id, selectedId)
+      setDetail(refreshed)
+    } catch (error) {
+      setActionError(describeActionError(error, price))
     } finally {
       setActionState('idle')
     }
@@ -182,6 +223,7 @@ function OpportunityWorkspace({ merchant }) {
         onGenerateDraft={handleGenerateDraft}
         onApproveProduct={handleApproveProduct}
         onRejectProduct={handleRejectProduct}
+        onSetPrice={handleSetPrice}
         actionState={actionState}
         actionError={actionError}
       />

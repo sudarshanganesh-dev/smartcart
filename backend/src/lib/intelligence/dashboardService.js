@@ -76,13 +76,60 @@ async function buildAttentionQueue({ merchantId, openList }) {
   const ordinaryAwaitingReview = [];
 
   for (const product of pendingProducts) {
-    const missing = getApprovalRequirementFailures(product);
-    if (missing.length > 0) {
-      missingFieldsProducts.push({ id: product.id, missing });
-      continue;
-    }
+    // AI_OPPORTUNITY products are handled BEFORE ordinary catalog
+    // aggregation, always individually — a fresh draft is created with
+    // price: null by design (generateDraftForOpportunity's Decision 5:
+    // Gemini's response schema has no price field at all), and that must
+    // never fold into the same generic "catalog products need completion"
+    // bucket as an ordinary manually-entered product missing a field. That
+    // would hide the fact SmartCart just did real work.
+    if (product.sourceType === "AI_OPPORTUNITY") {
+      const missing = getApprovalRequirementFailures(product);
 
-    if (product.sourceType !== "AI_OPPORTUNITY") {
+      if (missing.length === 1 && missing[0] === "price") {
+        // Structurally valid draft, just needs its merchant-owned price.
+        // Ceiling evidence reuses getOpportunityForMerchant's own
+        // demandSupportedCeiling — the SAME trusted computation
+        // validateGeneratedProductPrice itself checks against — never a
+        // second, parallel calculation.
+        let demandSupportedCeiling = null;
+        if (product.originOpportunityId) {
+          const originOpportunity = await getOpportunityForMerchant({ merchantId, opportunityId: product.originOpportunityId });
+          demandSupportedCeiling = originOpportunity?.demandSupportedCeiling?.ceiling ?? null;
+        }
+        items.push({
+          type: "AI_PRODUCT_NEEDS_PRICING",
+          severity: "MEDIUM",
+          title: `${product.name} needs a selling price`,
+          explanation: "SmartCart created this product from observed buyer demand. Set a price before it can be reviewed.",
+          evidence: { originOpportunityId: product.originOpportunityId, demandSupportedCeiling },
+          actionLabel: "Review opportunity",
+          actionTarget: { type: "OPPORTUNITY", id: product.originOpportunityId },
+        });
+        continue;
+      }
+
+      if (missing.length > 0) {
+        // Genuinely incomplete beyond just price — still an individual,
+        // honest item naming every missing field, never silently folded
+        // into the ordinary catalog aggregate.
+        items.push({
+          type: "AI_PRODUCT_MISSING_FIELDS",
+          severity: "MEDIUM",
+          title: `${product.name} is missing required fields`,
+          explanation: `This AI-generated product can't be approved until ${missing.join(", ")} ${missing.length === 1 ? "is" : "are"} set.`,
+          evidence: { missing },
+          actionLabel: "Review product",
+          actionTarget: { type: "PRODUCT", id: product.id },
+        });
+        continue;
+      }
+    } else {
+      const missing = getApprovalRequirementFailures(product);
+      if (missing.length > 0) {
+        missingFieldsProducts.push({ id: product.id, missing });
+        continue;
+      }
       ordinaryAwaitingReview.push(product.id);
       continue;
     }

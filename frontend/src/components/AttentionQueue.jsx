@@ -2,14 +2,20 @@ import { Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 import { formatMoney } from '../lib/formatMoney.js'
 
-// Where to send the merchant for each actionTarget.type. The current
-// routing architecture has no URL-addressable "open this one product/
-// opportunity" view, so every target lands on the existing workspace that
-// owns that kind of record - never a new, duplicate management screen.
-const ROUTE_BY_TARGET_TYPE = {
-  OPPORTUNITY: '/merchant/opportunities',
-  PRODUCT: '/merchant/catalog',
-  CATALOG: '/merchant/catalog',
+// Where to send the merchant for each actionTarget.type. OPPORTUNITY now
+// deep-links straight to that one opportunity (OpportunityWorkspace reads
+// ?id= on mount) instead of only the bare list - a small, safe addition to
+// the existing workspace, not a new page. PRODUCT/CATALOG still land on the
+// existing Catalog workspace - there is no URL-addressable single-product
+// view today, and this pass does not add one.
+function routeForTarget(actionTarget) {
+  if (actionTarget?.type === 'OPPORTUNITY' && actionTarget.id) {
+    return `/merchant/opportunities?id=${encodeURIComponent(actionTarget.id)}`
+  }
+  // PRODUCT, CATALOG, and any unrecognized target all land on the existing
+  // Catalog workspace - there is no URL-addressable single-product view
+  // today, and this pass does not add one.
+  return '/merchant/catalog'
 }
 
 // Renders only what the backend's evidence object actually contains - never
@@ -29,6 +35,10 @@ function EvidenceList({ item }) {
     }
   } else if (item.type === 'AI_PRODUCT_AWAITING_APPROVAL' && item.evidence?.price != null) {
     facts.push(`Price: ${formatMoney(item.evidence.price)}`)
+  } else if (item.type === 'AI_PRODUCT_NEEDS_PRICING' && item.evidence?.demandSupportedCeiling != null) {
+    facts.push(`Demand-supported ceiling: ${formatMoney(item.evidence.demandSupportedCeiling)}`)
+  } else if (item.type === 'AI_PRODUCT_MISSING_FIELDS' && item.evidence?.missing) {
+    facts.push(item.evidence.missing.join(', '))
   } else if (item.type === 'CATALOG_REVIEW_REQUIRED' && item.evidence?.missingFieldCounts) {
     const breakdown = Object.entries(item.evidence.missingFieldCounts)
       .map(([field, count]) => `${field}: ${count}`)
@@ -69,7 +79,7 @@ function AttentionQueue({ items }) {
           </div>
           <p className="attention-item__explanation">{item.explanation}</p>
           <EvidenceList item={item} />
-          <Link to={ROUTE_BY_TARGET_TYPE[item.actionTarget?.type] || '/merchant/catalog'} className="attention-item__action">
+          <Link to={routeForTarget(item.actionTarget)} className="attention-item__action">
             {item.actionLabel}
             <ArrowRight size={13} strokeWidth={2.25} aria-hidden="true" />
           </Link>

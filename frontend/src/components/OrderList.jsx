@@ -1,4 +1,4 @@
-import { CheckCircle2 } from 'lucide-react'
+import { CheckCircle2, Sparkles } from 'lucide-react'
 import { formatMoney } from '../lib/formatMoney.js'
 
 function formatDateTime(iso) {
@@ -23,6 +23,12 @@ function OrderList({ orders, onSelect }) {
                   {isPaid && <CheckCircle2 size={12} strokeWidth={2.5} aria-hidden="true" />}
                   {order.status.replace('_', ' ')}
                 </span>
+                {order.aiAttributed && (
+                  <span className="source-badge source-badge--ai">
+                    <Sparkles size={11} strokeWidth={2.25} aria-hidden="true" />
+                    AI-attributed
+                  </span>
+                )}
               </div>
               <div className="order-row__meta">
                 <span className="num-tabular">{formatMoney(order.total)}</span>

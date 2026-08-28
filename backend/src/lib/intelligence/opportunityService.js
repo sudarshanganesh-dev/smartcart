@@ -717,7 +717,7 @@ async function labelFor(reason, representative, fallbackScope) {
 // — used only to surface human-readable intent context (budget band,
 // requested quantity/stock gap); every COUNT/SUM number still comes from
 // `stats`, never from this single row.
-function toOpportunityListDTO(opportunity, stats, label, representative, catalogGap = null, demandCeiling = null) {
+function toOpportunityListDTO(opportunity, stats, label, representative, catalogGap = null, demandCeiling = null, generatedProductName = null) {
   const scoreBreakdown = computeScore({ ...stats, reason: opportunity.reason });
   const budgetBand = representative?.budgetBand ?? null;
 
@@ -760,6 +760,10 @@ function toOpportunityListDTO(opportunity, stats, label, representative, catalog
     // CREATE_VARIANT once the detail page's exact catalog-gap query runs.
     suggestedAction: determineAction({ reason: opportunity.reason, catalogGap }),
     generatedProductId: opportunity.generatedProductId,
+    // Display-only, real product name — batch-fetched by the caller (see
+    // listOpportunitiesForMerchant), never a fresh per-opportunity query.
+    // Null whenever no product has been generated yet.
+    generatedProductName,
     signalsBeforeAction,
     signalsSinceAction,
     firstSeenAt: opportunity.firstSeenAt,
@@ -787,10 +791,19 @@ export async function listOpportunitiesForMerchant({ merchantId, status }) {
   });
   if (opportunities.length === 0) return [];
 
-  const [stats, representatives] = await Promise.all([
+  const generatedProductIds = [...new Set(opportunities.map((o) => o.generatedProductId).filter(Boolean))];
+
+  const [stats, representatives, generatedProducts] = await Promise.all([
     loadStatsByGroupKey(merchantId),
     loadRepresentativeByGroupKey(merchantId, opportunities.map((o) => o.groupKey)),
+    // One batch query for every ACTIONED opportunity's generated product
+    // name — not one lookup per opportunity — same reasoning as
+    // loadRepresentativeByGroupKey above.
+    generatedProductIds.length > 0
+      ? prisma.product.findMany({ where: { id: { in: generatedProductIds } }, select: { id: true, name: true } })
+      : Promise.resolve([]),
   ]);
+  const generatedProductNameById = new Map(generatedProducts.map((p) => [p.id, p.name]));
 
   const dtos = await Promise.all(
     opportunities.map(async (o) => {
@@ -800,7 +813,10 @@ export async function listOpportunitiesForMerchant({ merchantId, status }) {
         o,
         stats.get(o.groupKey) || { eventCount: 0, recentEventCount7d: 0, potentialDemandValue: null },
         label,
-        representative
+        representative,
+        null,
+        null,
+        o.generatedProductId ? generatedProductNameById.get(o.generatedProductId) ?? null : null
       );
     })
   );

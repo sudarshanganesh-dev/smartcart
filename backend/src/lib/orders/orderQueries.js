@@ -10,7 +10,13 @@ const DEFAULT_LIMIT = 50;
 
 // Small, list-appropriate DTO — no line items, no Razorpay identifiers, no
 // internal-only fields (sequenceNumber, conversationId, merchantId).
-function toOrderListDTO(order) {
+// `aiProductIds` is the same authoritative AI-attribution relationship
+// already used for the Overview's verified AI revenue (see
+// dashboardService.js's buildAiRevenueImpact): an order counts as
+// AI-attributed only when one of its real OrderItem.productId values
+// belongs to a Product with sourceType AI_OPPORTUNITY — never inferred from
+// amount, order number, product name, or date.
+function toOrderListDTO(order, aiProductIds) {
   return {
     id: order.id,
     orderNumber: order.orderNumber,
@@ -19,6 +25,7 @@ function toOrderListDTO(order) {
     currency: order.currency,
     total: order.total.toFixed(2),
     itemCount: order.items.reduce((sum, item) => sum + item.quantity, 0),
+    aiAttributed: order.items.some((item) => item.productId && aiProductIds.has(item.productId)),
     createdAt: order.createdAt,
   };
 }
@@ -57,14 +64,21 @@ export async function listOrdersForMerchant({ merchantId, status, limit = DEFAUL
   const boundedLimit = Math.min(Math.max(1, limit), MAX_LIMIT);
   const where = { merchantId, ...(status ? { status } : {}) };
 
-  const orders = await prisma.order.findMany({
-    where,
-    include: { items: true },
-    orderBy: { createdAt: "desc" },
-    take: boundedLimit,
-  });
+  const [orders, aiProducts] = await Promise.all([
+    prisma.order.findMany({
+      where,
+      include: { items: true },
+      orderBy: { createdAt: "desc" },
+      take: boundedLimit,
+    }),
+    // One batch query for the whole merchant, not one lookup per order/item —
+    // same reasoning as loadStatsByGroupKey/loadRepresentativeByGroupKey in
+    // opportunityService.js.
+    prisma.product.findMany({ where: { merchantId, sourceType: "AI_OPPORTUNITY" }, select: { id: true } }),
+  ]);
+  const aiProductIds = new Set(aiProducts.map((p) => p.id));
 
-  return orders.map(toOrderListDTO);
+  return orders.map((order) => toOrderListDTO(order, aiProductIds));
 }
 
 // Scoped by BOTH orderId and merchantId in the same query — an order that

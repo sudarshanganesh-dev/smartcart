@@ -133,11 +133,11 @@ function OverviewPage() {
           </div>
           <div className="smartcart-brief__metric">
             <span className="smartcart-brief__metric-value num-tabular">{summary.aiRevenueImpact.verifiedAiOrderCount}</span>
-            <span className="smartcart-brief__metric-label">AI order{summary.aiRevenueImpact.verifiedAiOrderCount === 1 ? '' : 's'}</span>
+            <span className="smartcart-brief__metric-label">Verified AI order{summary.aiRevenueImpact.verifiedAiOrderCount === 1 ? '' : 's'}</span>
           </div>
           <div className="smartcart-brief__metric">
             <span className="smartcart-brief__metric-value num-tabular">{formatMoney(summary.aiRevenueImpact.verifiedAiRevenue)}</span>
-            <span className="smartcart-brief__metric-label">AI revenue</span>
+            <span className="smartcart-brief__metric-label">Verified AI revenue</span>
           </div>
         </div>
       </div>
@@ -148,7 +148,7 @@ function OverviewPage() {
           <StatCard label="Products live" value={summary.products.approved} icon={Package} />
           <StatCard label="Waiting for review" value={summary.products.pendingReview} icon={Clock} />
           <StatCard label="Orders paid" value={summary.orders.paid} icon={Receipt} />
-          <StatCard label="Money earned" value={formatMoney(summary.orders.revenue)} icon={IndianRupee} tabular />
+          <StatCard label="Total store revenue" value={formatMoney(summary.orders.revenue)} icon={IndianRupee} tabular />
           <StatCard label="Open opportunities" value={summary.opportunities.open} icon={Sparkles} />
         </div>
       </div>

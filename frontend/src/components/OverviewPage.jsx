@@ -225,7 +225,7 @@ function OverviewPage() {
         <div className="catalog-health__group">
           <h4>By availability</h4>
           <div className="overview-stats">
-            <StatCard label="In stock" value={summary.catalogHealth.inStock} icon={PackageCheck} />
+            <StatCard label="In stock & live" value={summary.catalogHealth.inStock} icon={PackageCheck} />
             <StatCard label="Out of stock" value={summary.catalogHealth.outOfStock} icon={PackageX} />
             <StatCard label="Unknown availability" value={summary.catalogHealth.unknown} icon={HelpCircle} />
           </div>

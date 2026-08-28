@@ -279,7 +279,13 @@ async function buildAiRevenueImpact({ merchantId, totalStoreRevenue }) {
 async function buildCatalogHealth({ merchantId }) {
   const [statusGroups, availabilityGroups, total] = await Promise.all([
     prisma.product.groupBy({ by: ["status"], where: { merchantId }, _count: true }),
-    prisma.product.groupBy({ by: ["availability"], where: { merchantId }, _count: true }),
+    // Scoped to APPROVED only — availability is a buyer-visibility concept
+    // (in stock / out of stock / unknown FOR SALE), so a REJECTED or
+    // PENDING_REVIEW product's availability flag must never inflate this
+    // into looking like sellable inventory. total/approved/pending/rejected
+    // above stay unscoped — this is the one clarity fix, not a broader
+    // Catalog Health redesign.
+    prisma.product.groupBy({ by: ["availability"], where: { merchantId, status: "APPROVED" }, _count: true }),
     prisma.product.count({ where: { merchantId } }),
   ]);
 

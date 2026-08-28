@@ -34,7 +34,22 @@ function toOrderListDTO(order, aiProductIds) {
 // reconciliation metadata for a merchant) and the immutable per-item
 // snapshot, but still no checkoutId, no conversationId, no payment
 // credentials, and no internal-only fields.
-function toOrderDetailDTO(order) {
+// `aiProductIds` is the exact same authoritative relationship the list DTO's
+// `aiAttributed` already uses (Product.sourceType === "AI_OPPORTUNITY") —
+// never a new/second attribution rule, never inferred from name/amount/date.
+// `aiAttributed` here is product provenance only, not a revenue claim — it
+// can legitimately be true for a PAYMENT_PENDING order too.
+function toOrderDetailDTO(order, aiProductIds) {
+  const aiAttributedItems = order.items
+    .filter((item) => item.productId && aiProductIds.has(item.productId))
+    .map((item) => ({
+      productId: item.productId,
+      productName: item.productName,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice.toFixed(2),
+      lineTotal: item.lineTotal.toFixed(2),
+    }));
+
   return {
     id: order.id,
     orderNumber: order.orderNumber,
@@ -53,6 +68,8 @@ function toOrderDetailDTO(order) {
       unitPrice: item.unitPrice.toFixed(2),
       lineTotal: item.lineTotal.toFixed(2),
     })),
+    aiAttributed: aiAttributedItems.length > 0,
+    aiAttributedItems,
   };
 }
 
@@ -90,5 +107,12 @@ export async function getOrderForMerchant({ merchantId, orderId }) {
     where: { id: orderId, merchantId },
     include: { items: true },
   });
-  return order ? toOrderDetailDTO(order) : null;
+  if (!order) return null;
+
+  // Same batch-query pattern as listOrdersForMerchant — one lookup, not one
+  // per item.
+  const aiProducts = await prisma.product.findMany({ where: { merchantId, sourceType: "AI_OPPORTUNITY" }, select: { id: true } });
+  const aiProductIds = new Set(aiProducts.map((p) => p.id));
+
+  return toOrderDetailDTO(order, aiProductIds);
 }

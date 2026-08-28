@@ -1,4 +1,4 @@
-import { ArrowLeft, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Sparkles } from 'lucide-react'
 import { formatMoney } from '../lib/formatMoney.js'
 
 function formatDateTime(iso) {
@@ -39,6 +39,24 @@ function OrderDetail({ order, loading, error, onBack, onRetry }) {
               <CheckCircle2 size={14} strokeWidth={2.25} aria-hidden="true" />
               Payment received and order confirmed.
             </p>
+          )}
+
+          {order.aiAttributed && (
+            <div className="order-detail__ai-attribution">
+              <p className="order-detail__ai-attribution-title">
+                <Sparkles size={13} strokeWidth={2.25} aria-hidden="true" />
+                AI-attributed order
+              </p>
+              <p className="field-hint">This order includes a product created from a SmartCart demand opportunity.</p>
+              <ul className="order-detail__ai-attribution-items">
+                {order.aiAttributedItems.map((item) => (
+                  <li key={item.productId}>
+                    {item.productName}
+                    <span className="num-tabular"> · {formatMoney(item.unitPrice)} × {item.quantity}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
 
           <dl className="order-detail__summary">

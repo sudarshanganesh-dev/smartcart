@@ -1641,6 +1641,81 @@ button:disabled {
   text-align: left;
 }
 
+/* Compact "what does SmartCart expect" card shown once a format is chosen —
+   its own scoped classes (same pattern as .crawl-website__* below), not a
+   reuse of .ingestion-card, since this is a guide, not a choice. */
+.upload-format-guide {
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.upload-format-guide__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.upload-format-guide__row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.upload-format-guide__row-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text);
+}
+
+.upload-format-guide__fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.upload-format-guide__field {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-h);
+}
+
+.upload-format-guide__field--required {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.upload-format-guide__code {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.upload-format-guide__download {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+}
+
 .upload-summary {
   display: flex;
   flex-direction: column;

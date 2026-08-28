@@ -1,10 +1,136 @@
 import { useState } from 'react'
+import { Download } from 'lucide-react'
 import { importCatalog, ApiError } from '../lib/api.js'
 
 const FORMAT_OPTIONS = [
   { key: 'csv', label: 'CSV', accept: '.csv,text/csv' },
   { key: 'json', label: 'JSON', accept: '.json,application/json' },
 ]
+
+// Mirrors catalogImport.js's CANONICAL_FIELDS exactly (backend/src/lib/catalogImport.js) —
+// display labels only, never re-validated here. The importer itself only
+// unconditionally requires "Name" (see productValidation.js,
+// requireCommerceFields: false) and deliberately allows an incomplete row
+// into Pending Review to be completed later via the product edit form.
+// Price/Currency/Category are grouped as "recommended" (not "required")
+// because that's what a merchant needs for a genuinely complete, buyer-ready
+// listing — Price/Currency are enforced at approval time
+// (getApprovalRequirementFailures), but Category is not a hard gate anywhere
+// in the backend, so it must never be labeled as required.
+const CSV_RECOMMENDED_FIELDS = ['Name', 'Price', 'Currency', 'Category']
+const CSV_OPTIONAL_FIELDS = ['Description', 'SKU', 'Availability', 'Stock Quantity']
+// Matches productValidation.js's AVAILABILITY_VALUES exactly.
+const AVAILABILITY_VALUES = ['IN_STOCK', 'OUT_OF_STOCK', 'UNKNOWN']
+
+const CSV_TEMPLATE_FILENAME = 'smartcart-catalog-template.csv'
+// One realistic example row, using the exact header names catalogImport.js's
+// CANONICAL_LOOKUP recognizes (headers are matched case-insensitively, but the
+// template uses the canonical casing). Generated and downloaded entirely in
+// the browser — no backend call, no database write.
+const CSV_TEMPLATE_CONTENT =
+  'Name,Description,Price,Currency,Category,SKU,Availability,StockQuantity\n' +
+  'Chocolate Cupcake Box,Box of chocolate cupcakes,349.00,INR,Cupcakes,CUPCAKE-001,IN_STOCK,12\n'
+
+// Real object -> JSON.stringify at render time, so the displayed example can
+// never silently drift from valid JSON. Keys match catalogImport.js's
+// normalizeRow() exactly (parseJson() does no header remapping, unlike CSV —
+// JSON keys are read by this exact camelCase name).
+const JSON_EXAMPLE = [
+  {
+    name: 'Chocolate Cupcake Box',
+    description: 'Box of chocolate cupcakes',
+    price: 349,
+    currency: 'INR',
+    category: 'Cupcakes',
+    sku: 'CUPCAKE-001',
+    availability: 'IN_STOCK',
+    stockQuantity: 12,
+  },
+]
+
+function downloadCsvTemplate() {
+  const blob = new Blob([CSV_TEMPLATE_CONTENT], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = CSV_TEMPLATE_FILENAME
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+function FormatGuide({ format }) {
+  if (format === 'csv') {
+    return (
+      <div className="upload-format-guide">
+        <p className="upload-format-guide__title">CSV format</p>
+
+        <div className="upload-format-guide__row">
+          <span className="upload-format-guide__row-label">Recommended for a complete product</span>
+          <div className="upload-format-guide__fields">
+            {CSV_RECOMMENDED_FIELDS.map((field) => (
+              <span key={field} className="upload-format-guide__field upload-format-guide__field--required">
+                {field}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className="upload-format-guide__row">
+          <span className="upload-format-guide__row-label">Optional</span>
+          <div className="upload-format-guide__fields">
+            {CSV_OPTIONAL_FIELDS.map((field) => (
+              <span key={field} className="upload-format-guide__field">
+                {field}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <p className="field-hint">
+          Availability: {AVAILABILITY_VALUES.join(' · ')}. Currency: a 3-letter code, e.g. INR.
+        </p>
+
+        <button type="button" className="upload-format-guide__download" onClick={downloadCsvTemplate}>
+          <Download size={14} strokeWidth={2.25} aria-hidden="true" />
+          Download CSV template
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="upload-format-guide">
+      <p className="upload-format-guide__title">JSON format</p>
+      <p className="field-hint">A JSON array of products, each with these fields:</p>
+
+      <div className="upload-format-guide__row">
+        <span className="upload-format-guide__row-label">Recommended for a complete product</span>
+        <div className="upload-format-guide__fields">
+          {['name', 'price', 'currency', 'category'].map((field) => (
+            <span key={field} className="upload-format-guide__field upload-format-guide__field--required">
+              {field}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="upload-format-guide__row">
+        <span className="upload-format-guide__row-label">Optional</span>
+        <div className="upload-format-guide__fields">
+          {['description', 'sku', 'availability', 'stockQuantity'].map((field) => (
+            <span key={field} className="upload-format-guide__field">
+              {field}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <pre className="upload-format-guide__code">{JSON.stringify(JSON_EXAMPLE, null, 2)}</pre>
+    </div>
+  )
+}
 
 function describeBatchError(error) {
   if (error instanceof ApiError && error.body?.error) {
@@ -105,6 +231,8 @@ function UploadCatalog({ merchant, onBack, onDone }) {
               change
             </button>
           </p>
+
+          <FormatGuide format={format} />
 
           {batchError && (
             <div className="error-banner">

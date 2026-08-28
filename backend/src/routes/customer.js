@@ -19,6 +19,7 @@ customerRouter.post("/chat", async (req, res) => {
       conversationId: result.conversationId,
       message: result.message,
       products: result.products,
+      isFallback: result.isFallback,
       bundle: result.bundle,
       followUp: result.followUp,
       cart: result.cart,

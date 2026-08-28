@@ -130,6 +130,11 @@ const ORDER_OR_BACK_CTA = "Would you like me to order this, or go back to the ot
 const CHOOSE_ONE_CTA = "Which one would you like to go with?";
 const MORE_OPTIONS_CTA = "Would you like to go with one of these, or should I show you more options?";
 const BROADEN_SEARCH_CTA = "Would you like me to broaden the search?";
+// Used only when the primary text-constrained search found nothing but
+// conversionRecovery's existing budget/availability-relaxed fallback did —
+// deliberately distinct from BROADEN_SEARCH_CTA so it never implies these
+// products are an exact match for what the customer asked.
+const FALLBACK_ALTERNATIVES_CTA = "Would you like one of these instead, or should I broaden the search?";
 // Only ever used after a real add_to_cart/update_cart_item success this
 // turn (see the cartMutationSucceeded check below) — never fired merely
 // because the model said something that sounds like a cart update.
@@ -149,9 +154,25 @@ const CHECKOUT_OR_CONTINUE_CTA = "Would you like to proceed to checkout or conti
 // first unseen candidates (in commerceService's own return order) are shown
 // instead, so the feature degrades gracefully rather than failing silently.
 function resolveDisplayAndCta({ searchContext, requestedIds, isRepeatSingle }) {
-  const { candidateIds, candidates, shownProductIds } = searchContext;
+  const { candidateIds, candidates, shownProductIds, fallbackAlternatives } = searchContext;
 
   if (candidateIds.length === 0) {
+    // The primary text-constrained search found nothing, but
+    // conversionRecovery.findPriceAlternative (already computed in
+    // buyerAgent.js's search_products handling) found real, grounded,
+    // in-budget/in-stock products via a broader, price/availability-only
+    // query. Their display must never depend on whether Gemini's own
+    // message happens to mention them — surfaced deterministically here,
+    // the same way every other candidate list is. isFallback tells the
+    // caller (and ultimately the customer response) these are budget
+    // alternatives, never an exact match.
+    if (Array.isArray(fallbackAlternatives) && fallbackAlternatives.length > 0) {
+      const unseenFallback = fallbackAlternatives.filter((p) => !shownProductIds.has(p.id));
+      if (unseenFallback.length > 0) {
+        unseenFallback.forEach((p) => shownProductIds.add(p.id));
+        return { display: unseenFallback, followUp: FALLBACK_ALTERNATIVES_CTA, isFallback: true };
+      }
+    }
     return { display: [], followUp: BROADEN_SEARCH_CTA };
   }
 
@@ -198,7 +219,7 @@ function resolveTurnOutcome({ searchOutcome, showMoreOutcome, discussedProduct, 
     // product cards from an earlier search_products call this same turn,
     // which would send a contradictory signal right when SmartCart is
     // deliberately asking rather than guessing.
-    return { products: [], bundle: null, followUp: null };
+    return { products: [], bundle: null, followUp: null, isFallback: false };
   }
 
   if (bundleOutcome) {
@@ -206,28 +227,28 @@ function resolveTurnOutcome({ searchOutcome, showMoreOutcome, discussedProduct, 
     // to cart" button, which is already the correct call to action. Adding
     // a second, text-only "would you like me to add these?" would just be
     // redundant with the button already on screen.
-    return { products: [], bundle: bundleOutcome.bundle, followUp: null };
+    return { products: [], bundle: bundleOutcome.bundle, followUp: null, isFallback: false };
   }
 
   let outcome;
   if (searchOutcome) {
-    const { display, followUp } = resolveDisplayAndCta({
+    const { display, followUp, isFallback } = resolveDisplayAndCta({
       searchContext: state.searchContext,
       requestedIds: requestedProductIds,
       isRepeatSingle: searchOutcome.isRepeatSingle,
     });
-    outcome = { products: display, followUp };
+    outcome = { products: display, followUp, isFallback: Boolean(isFallback) };
   } else if (showMoreOutcome) {
     // show_more_products resolves immediately when called (see the per-call
     // loop) so its own tool response can tell the model whether it's
     // exhausted — reuse that same resolution here rather than recomputing
     // (recomputing would double-mutate shownProductIds).
-    outcome = { products: showMoreOutcome.display, followUp: showMoreOutcome.followUp };
+    outcome = { products: showMoreOutcome.display, followUp: showMoreOutcome.followUp, isFallback: Boolean(showMoreOutcome.isFallback) };
   } else if (discussedProduct) {
     const hadAlternatives = Boolean(state.searchContext && state.searchContext.candidateIds.length > 1);
-    outcome = { products: lastProducts, followUp: hadAlternatives ? ORDER_OR_BACK_CTA : ORDER_ONLY_CTA };
+    outcome = { products: lastProducts, followUp: hadAlternatives ? ORDER_OR_BACK_CTA : ORDER_ONLY_CTA, isFallback: false };
   } else {
-    outcome = { products: [], followUp: null };
+    outcome = { products: [], followUp: null, isFallback: false };
   }
 
   // Deterministic "why this?" decoration — the same trusted filters already
@@ -249,7 +270,7 @@ function resolveTurnOutcome({ searchOutcome, showMoreOutcome, discussedProduct, 
     if (product && product.id) state.everShownProductIds.add(product.id);
   }
 
-  return { products: decorated, bundle: null, followUp: outcome.followUp };
+  return { products: decorated, bundle: null, followUp: outcome.followUp, isFallback: outcome.isFallback };
 }
 
 function getOrCreateConversation(conversationId) {
@@ -527,6 +548,12 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
   let finalText = null;
   let finalFollowUp = null;
   let lastProducts = [];
+  // True only when the products in the final response are conversionRecovery
+  // budget/availability-relaxed fallback alternatives (no exact-match
+  // candidates found), never when a real, text-matching search succeeded —
+  // lets the customer response clearly label these as alternatives rather
+  // than an exact match, regardless of what Gemini's own message says.
+  let isFallbackAlternatives = false;
   let discussedProduct = false;
   let searchOutcome = null; // set when search_products is called this turn
   let requestedProductIds = null;
@@ -614,6 +641,7 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
       });
       lastProducts = outcome.products;
       bundleToShow = outcome.bundle;
+      isFallbackAlternatives = outcome.isFallback;
       finalFollowUp = cartMutationSucceeded ? CHECKOUT_OR_CONTINUE_CTA : outcome.followUp;
       state.messages.push({ role: "assistant", text: finalText });
       break;
@@ -830,6 +858,11 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
             candidateIds,
             candidates: Object.fromEntries(toolResult.products.map((p) => [p.id, p])),
             shownProductIds: new Set(),
+            // Populated below, only for a genuinely zero-candidate search —
+            // conversionRecovery.findPriceAlternative's own already-trusted,
+            // budget/availability-relaxed real products (see resolveDisplayAndCta).
+            // Null until (and unless) that fallback actually finds something.
+            fallbackAlternatives: null,
             // Phase 7: the filters that produced this search context, kept
             // only for demand-event attribution/value (recordNoMoreOptionsDemandEvent) —
             // never re-shown to the customer or the model. Reaching this point
@@ -896,6 +929,16 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
                 state.knownProductIds.add(alt.id);
                 state.everShownProductIds.add(alt.id);
               }
+              // Deterministically expose these grounded, in-budget/in-stock
+              // alternatives to the customer via resolveDisplayAndCta — their
+              // display must never depend on whether Gemini's own message
+              // happens to mention them. Only attached when this exact empty
+              // search is the one that just became/remained the active
+              // context (shouldReplaceContext) — never onto an unrelated,
+              // still-active earlier search from the same turn.
+              if (shouldReplaceContext) {
+                state.searchContext.fallbackAlternatives = alternatives;
+              }
             }
           } catch (error) {
             console.error("[buyer-agent] conversion recovery failed:", error.message);
@@ -931,6 +974,7 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
       finalFollowUp = null;
       lastProducts = [];
       bundleToShow = null;
+      isFallbackAlternatives = false;
       state.checkoutReady = checkoutOutcome.ready;
       break;
     }
@@ -951,6 +995,7 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
       });
       lastProducts = outcome.products;
       bundleToShow = outcome.bundle;
+      isFallbackAlternatives = outcome.isFallback;
       // A successful cart mutation this turn always wins the CTA slot —
       // never fired merely because the model's own text sounds like a cart
       // update; only a real add_to_cart/update_cart_item success sets this.
@@ -966,6 +1011,7 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
     finalFollowUp = null;
     lastProducts = [];
     bundleToShow = null;
+    isFallbackAlternatives = false;
   }
 
   logTurn({
@@ -981,6 +1027,11 @@ export async function handleMessage(conversationId, userMessage, { sendChatFn = 
     conversationId: id,
     message: finalText,
     products: lastProducts,
+    // True only when `products` are conversionRecovery's budget/availability
+    // fallback alternatives rather than an exact-match search result — the
+    // frontend uses this to label them as alternatives, never an exact
+    // match, independent of whatever Gemini's own message text says.
+    isFallback: isFallbackAlternatives,
     bundle: bundleToShow,
     followUp: finalFollowUp,
     cart: toCartDTO(state.cart),

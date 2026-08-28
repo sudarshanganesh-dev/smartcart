@@ -245,7 +245,10 @@ function CustomerChat() {
       setCart(result.cart ?? null)
       setCheckoutReady(Boolean(result.checkoutReady))
       setMessages((prev) => {
-        const next = [...prev, { role: 'assistant', text: result.message, products: result.products, bundle: result.bundle }]
+        const next = [
+          ...prev,
+          { role: 'assistant', text: result.message, products: result.products, bundle: result.bundle, isFallback: Boolean(result.isFallback) },
+        ]
         // followUp is rendered as its own bubble, appearing after the product
         // card rather than folded into the main reply's text.
         if (result.followUp) {
@@ -404,6 +407,9 @@ function CustomerChat() {
                 {entry.role === 'assistant' ? <AssistantText text={entry.text} /> : <p>{entry.text}</p>}
                 {entry.products && entry.products.length > 0 && (
                   <div className="chat-product-list">
+                    {entry.isFallback && (
+                      <p className="field-hint">No exact match found — here are available options within your budget:</p>
+                    )}
                     {entry.products.map((product) => (
                       <ProductCard
                         key={product.id}

@@ -2035,12 +2035,6 @@ button:disabled {
   margin: 0;
 }
 
-.shop-shell__merchant {
-  font-size: 12px;
-  color: var(--text);
-  margin: 0;
-}
-
 .shop-shell__nav {
   display: flex;
   align-items: center;

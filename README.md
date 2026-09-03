@@ -339,3 +339,198 @@ This preserved catalog grounding while improving natural-language discovery.
                          │ Merchant Growth     │
                          │ & Demand System     │
                          └─────────────────────┘
+
+---
+
+# Run SmartCart Locally
+
+## Prerequisites
+
+Before running SmartCart, install or have access to:
+
+- Node.js 18+
+- PostgreSQL
+- Google Gemini API key
+- Razorpay Test Mode API credentials
+
+## 1. Clone the Repository
+
+```bash
+git clone https://github.com/sudarshanganesh-dev/smartcart.git
+cd smartcart
+```
+
+## 2. Set Up the Backend
+
+```bash
+cd backend
+npm install
+```
+
+Create your environment file from the included example.
+
+### Windows PowerShell
+
+```powershell
+Copy-Item .env.example .env
+```
+
+### macOS / Linux
+
+```bash
+cp .env.example .env
+```
+
+Then configure `backend/.env`:
+
+```env
+PORT=4000
+DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/ai_commerce_layer?schema=public"
+
+GEMINI_API_KEY="YOUR_GEMINI_API_KEY"
+AI_PROVIDER="gemini"
+AI_MODEL="gemini-3.5-flash-lite"
+
+RAZORPAY_KEY_ID="rzp_test_YOUR_TEST_KEY_ID"
+RAZORPAY_KEY_SECRET="YOUR_RAZORPAY_TEST_KEY_SECRET"
+```
+
+Use your own PostgreSQL, Gemini and Razorpay Test Mode credentials.
+
+**Never commit the `.env` file.**
+
+## 3. Prepare the Database
+
+Generate the Prisma client:
+
+```bash
+npm run prisma:generate
+```
+
+Apply the included migrations:
+
+```bash
+npx prisma migrate deploy
+```
+
+To load the included demo catalog/data:
+
+```bash
+npm run seed:demo
+```
+
+## 4. Start the Backend
+
+```bash
+npm run dev
+```
+
+The backend runs at:
+
+```text
+http://localhost:4000
+```
+
+Health check:
+
+```text
+http://localhost:4000/api/health
+```
+
+## 5. Set Up the Frontend
+
+Open a second terminal from the project root:
+
+```bash
+cd frontend
+npm install
+```
+
+The default frontend configuration uses:
+
+```env
+VITE_API_BASE_URL=http://localhost:4000
+```
+
+If needed, create `frontend/.env` from the included example:
+
+### Windows PowerShell
+
+```powershell
+Copy-Item .env.example .env
+```
+
+### macOS / Linux
+
+```bash
+cp .env.example .env
+```
+
+## 6. Start the Frontend
+
+```bash
+npm run dev
+```
+
+Open:
+
+```text
+http://localhost:5173
+```
+
+You can now use the SmartCart buyer experience and merchant dashboard locally.
+
+---
+
+# Useful Commands
+
+Frontend production build:
+
+```bash
+cd frontend
+npm run build
+```
+
+Frontend lint:
+
+```bash
+cd frontend
+npm run lint
+```
+
+Backend production start:
+
+```bash
+cd backend
+npm start
+```
+
+---
+
+# Environment Variables
+
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | PostgreSQL database connection |
+| `GEMINI_API_KEY` | Gemini API access |
+| `AI_PROVIDER` | AI provider selection |
+| `AI_MODEL` | Gemini model configuration |
+| `RAZORPAY_KEY_ID` | Razorpay Test Mode key ID |
+| `RAZORPAY_KEY_SECRET` | Razorpay Test Mode secret |
+| `PORT` | Backend server port |
+| `ALLOWED_ORIGINS` | Optional CORS allowlist |
+| `FORCE_RATE_LIMIT` | Optional local rate-limit testing |
+| `VITE_API_BASE_URL` | Frontend backend-API URL |
+
+---
+
+# Buildathon Demo
+
+🎥 **Demo Video:** https://youtu.be/JTWRIrNB2hM
+
+**Razorpay AI Buildathon 2026**  
+**Track 1 — AI Growth & Agentic Commerce**
+
+Built by **Sudarshan**  
+B.Tech Computer Science and Engineering  
+SRM University, Chennai

@@ -339,6 +339,7 @@ This preserved catalog grounding while improving natural-language discovery.
                          │ Merchant Growth     │
                          │ & Demand System     │
                          └─────────────────────┘
+```
 
 ---
 
